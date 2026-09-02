@@ -1,0 +1,21 @@
+[Unit]
+Description=Wake-on-LAN relay for the tailnet
+# Wait for tailscale so binding to the tailscale IP doesn't race it at boot.
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/wakepc/wakepc.py
+Restart=on-failure
+RestartSec=5
+# Dedicated unprivileged user; it owns /etc/wakepc.conf (mode 600).
+# Create with: useradd -r -s /usr/sbin/nologin wakepc
+User=wakepc
+Group=wakepc
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

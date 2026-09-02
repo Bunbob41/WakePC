@@ -1,0 +1,22 @@
+# Copy to /etc/wakepc.conf, then: sudo chmod 600 /etc/wakepc.conf
+[wakepc]
+# Generate with: openssl rand -hex 32
+token = REPLACE_ME
+
+# The PC's ethernet MAC address (the NIC that has Wake-on-LAN enabled).
+# Find it on the PC with: ipconfig /all  (look for "Physical Address")
+mac = AA:BB:CC:DD:EE:FF
+
+# The PC's LAN IP, used by /status to ping it. Give the PC a DHCP
+# reservation in your router so this doesn't drift.
+pc_ip = 192.168.1.50
+
+# LAN broadcast address. 255.255.255.255 usually works; if not, use your
+# subnet's broadcast, e.g. 192.168.1.255.
+broadcast_ip = 255.255.255.255
+
+# Bind to the Pi's Tailscale IP so the service is unreachable from the LAN
+# and the wider internet. Find it with: tailscale ip -4
+bind_host = 0.0.0.0
+
+port = 8787
