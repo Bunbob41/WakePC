@@ -12,8 +12,8 @@ android {
         minSdk = 31
         // 36 is what the S26 Ultra actually runs, matching the chat app's choice.
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.5.2"
+        versionCode = 11
+        versionName = "0.6.0"
     }
 
     buildTypes {
@@ -48,6 +48,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
@@ -60,4 +62,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

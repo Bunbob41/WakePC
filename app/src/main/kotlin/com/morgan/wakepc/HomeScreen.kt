@@ -22,92 +22,34 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
-private data class Transient(val text: String, val color: Color, val pulse: Boolean, val glow: Boolean)
-
-private fun fmtMs(value: Double): String = String.format(java.util.Locale.US, "%.1f", value)
+/** UI-layer mapping from the ViewModel's colour-free status to the palette. */
+private fun Tone.color(): Color = when (this) {
+    Tone.NEUTRAL -> Palette.dim
+    Tone.ACTIVE -> Palette.amber
+    Tone.GOOD -> Palette.green
+    Tone.BAD -> Palette.red
+}
 
 @Composable
 fun HomeScreen(
-    state: AppState,
+    vm: HomeViewModel,
     onAddMachine: () -> Unit,
     onEditMachine: (String) -> Unit,
     onSettings: () -> Unit,
     onConsole: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val transients = remember { mutableStateMapOf<String, Transient>() }
-    val awake = remember { mutableStateMapOf<String, Boolean>() }
-    val avgMs = remember { mutableStateMapOf<String, Double>() }
-    val running = remember { mutableStateMapOf<String, String>() }
+    val state by vm.state.collectAsState()
+    val runtime by vm.runtime.collectAsState()
     val logLines by AppLog.lines.collectAsState()
 
-    // Background status poll for machines that have a ping-able command.
-    LaunchedEffect(state.machines) {
-        while (isActive) {
-            state.machines.forEach { machine ->
-                val connection = state.connection(machine.connectionId) ?: return@forEach
-                val pingCmd = machine.commands.firstOrNull { it.ping } ?: return@forEach
-                if (!running.containsKey(machine.id)) {
-                    WakeApi.stats(connection, pingCmd.name).onSuccess { stats ->
-                        awake[machine.id] = stats.awake
-                        stats.avgMs?.let { avgMs[machine.id] = it }
-                    }
-                }
-            }
-            delay(15_000)
-        }
-    }
-
-    fun runButton(machine: Machine, connection: Connection, command: CommandRef) {
-        if (running.containsKey(machine.id)) return
-        runCommand(scope, machine, connection, command, transients, awake, running)
-    }
-
-    fun probe(machine: Machine, connection: Connection, command: CommandRef) {
-        if (running.containsKey(machine.id)) return
-        scope.launch {
-            running[machine.id] = command.name
-            transients[machine.id] = Transient("PROBING · 5 PINGS", Palette.amber, pulse = true, glow = true)
-            val result = WakeApi.stats(connection, command.name, count = 5)
-            running.remove(machine.id)
-            result.fold(
-                onSuccess = { stats ->
-                    awake[machine.id] = stats.awake
-                    stats.avgMs?.let { avgMs[machine.id] = it }
-                    transients[machine.id] = if (stats.avgMs != null) {
-                        Transient(
-                            "${fmtMs(stats.minMs ?: stats.avgMs)}/${fmtMs(stats.avgMs)}/" +
-                                "${fmtMs(stats.maxMs ?: stats.avgMs)}MS · ${stats.lossPct.toInt()}% LOSS",
-                            if (stats.lossPct > 0) Palette.amber else Palette.green,
-                            pulse = false,
-                            glow = true,
-                        )
-                    } else {
-                        Transient("NO REPLY · 100% LOSS", Palette.red, pulse = false, glow = false)
-                    }
-                },
-                onFailure = {
-                    transients[machine.id] = Transient("UNREACHABLE", Palette.faint, pulse = false, glow = false)
-                },
-            )
-            delay(6_000)
-            transients.remove(machine.id)
-        }
-    }
+    LaunchedEffect(Unit) { vm.startPolling() }
 
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -135,17 +77,18 @@ fun HomeScreen(
             state.machines.forEach { machine ->
                 val connection = state.connection(machine.connectionId)
                 val pingCmd = machine.commands.firstOrNull { it.ping }
+                val rt = runtime[machine.id] ?: MachineRuntime()
                 MachineCard(
                     machine = machine,
                     connection = connection,
-                    transient = transients[machine.id],
-                    awake = if (pingCmd != null) awake[machine.id] else null,
-                    avgMs = if (pingCmd != null) avgMs[machine.id] else null,
-                    runningCommand = running[machine.id],
-                    onRun = { cmd -> connection?.let { runButton(machine, it, cmd) } },
+                    transient = rt.transient,
+                    awake = if (pingCmd != null) rt.awake else null,
+                    avgMs = if (pingCmd != null) rt.avgMs else null,
+                    runningCommand = rt.running,
+                    onRun = { cmd -> connection?.let { vm.run(machine, it, cmd) } },
                     onEdit = { onEditMachine(machine.id) },
                     onProbe = if (pingCmd != null && connection != null) {
-                        { probe(machine, connection, pingCmd) }
+                        { vm.probe(machine, connection, pingCmd) }
                     } else {
                         null
                     },
@@ -182,67 +125,14 @@ fun HomeScreen(
 
         val hero = state.resolve(state.hero)
         if (hero != null) {
+            val rt = runtime[hero.machine.id] ?: MachineRuntime()
             HeroButton(
                 style = state.heroStyle,
                 resolved = hero,
-                transient = transients[hero.machine.id],
-                awake = if (hero.command.ping) awake[hero.machine.id] else null,
-                onRun = { runButton(hero.machine, hero.connection, hero.command) },
+                transient = rt.transient,
+                awake = if (hero.command.ping) rt.awake else null,
+                onRun = { vm.run(hero.machine, hero.connection, hero.command) },
             )
-        }
-    }
-}
-
-private fun runCommand(
-    scope: CoroutineScope,
-    machine: Machine,
-    connection: Connection,
-    command: CommandRef,
-    transients: MutableMap<String, Transient>,
-    awake: MutableMap<String, Boolean>,
-    running: MutableMap<String, String>,
-) {
-    scope.launch {
-        running[machine.id] = command.name
-        try {
-            if (command.ping) {
-                val start = System.currentTimeMillis()
-                transients[machine.id] = Transient("WAKING · 0:00", Palette.amber, pulse = true, glow = true)
-                if (WakeApi.run(connection, command.name).isFailure) {
-                    transients[machine.id] = Transient("UNREACHABLE", Palette.faint, pulse = false, glow = false)
-                    delay(3_000)
-                    transients.remove(machine.id)
-                    return@launch
-                }
-                val deadline = start + 90_000
-                while (System.currentTimeMillis() < deadline) {
-                    delay(3_000)
-                    val secs = ((System.currentTimeMillis() - start) / 1000).toInt()
-                    val clock = "${secs / 60}:${(secs % 60).toString().padStart(2, '0')}"
-                    transients[machine.id] = Transient("WAKING · $clock", Palette.amber, pulse = true, glow = true)
-                    if (WakeApi.status(connection, command.name).getOrDefault(false)) {
-                        awake[machine.id] = true
-                        transients.remove(machine.id)
-                        return@launch
-                    }
-                }
-                transients[machine.id] = Transient("NO REPLY YET", Palette.dim, pulse = false, glow = false)
-                delay(4_000)
-                transients.remove(machine.id)
-            } else {
-                transients[machine.id] = Transient("RUNNING", Palette.amber, pulse = true, glow = true)
-                val ok = WakeApi.run(connection, command.name).isSuccess
-                transients[machine.id] = Transient(
-                    if (ok) "OK" else "FAILED",
-                    if (ok) Palette.green else Palette.red,
-                    pulse = false,
-                    glow = ok,
-                )
-                delay(2_500)
-                transients.remove(machine.id)
-            }
-        } finally {
-            running.remove(machine.id)
         }
     }
 }
@@ -260,7 +150,7 @@ private fun MachineCard(
     onEdit: () -> Unit,
     onProbe: (() -> Unit)?,
 ) {
-    val active = transient != null && transient.color == Palette.amber
+    val active = transient?.tone == Tone.ACTIVE
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -286,7 +176,7 @@ private fun MachineCard(
             ) {
                 when {
                     transient != null ->
-                        StatusText(transient.text, transient.color, pulse = transient.pulse, glow = transient.glow)
+                        StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
                     awake == true -> StatusText(
                         "AWAKE" + (avgMs?.let { " · ${fmtMs(it)}MS" } ?: ""),
                         Palette.green,
@@ -333,7 +223,6 @@ private fun HeroButton(
     awake: Boolean?,
     onRun: () -> Unit,
 ) {
-    val label = "${resolved.command.name} · ${resolved.machine.name}"
     when (style) {
         HeroStyle.BANNER -> Row(
             modifier = Modifier
@@ -421,7 +310,7 @@ private fun HeroButton(
 @Composable
 private fun HeroStatus(transient: Transient?, awake: Boolean?) {
     when {
-        transient != null -> StatusText(transient.text, transient.color, pulse = transient.pulse, glow = transient.glow)
+        transient != null -> StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
         awake == true -> StatusText("AWAKE", Palette.green, glow = true)
         awake == false -> StatusText("ASLEEP", Palette.faint)
     }

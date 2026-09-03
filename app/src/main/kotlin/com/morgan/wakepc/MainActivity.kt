@@ -18,6 +18,9 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 
 sealed interface Screen {
     data object Home : Screen
@@ -89,8 +92,11 @@ private fun App(store: Store) {
             if (current.connections.isEmpty()) {
                 EmptyScreen(onAddConnection = { screen = Screen.EditConnection(null, fromEmpty = true) })
             } else {
+                val homeVm: HomeViewModel = viewModel(
+                    factory = viewModelFactory { initializer { HomeViewModel(store.state) } },
+                )
                 HomeScreen(
-                    state = current,
+                    vm = homeVm,
                     onAddMachine = { screen = Screen.EditMachine(null) },
                     onEditMachine = { screen = Screen.EditMachine(it) },
                     onSettings = { screen = Screen.Settings },

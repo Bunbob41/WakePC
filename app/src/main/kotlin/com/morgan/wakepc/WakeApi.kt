@@ -16,7 +16,15 @@ data class PingStats(
     val maxMs: Double?,
 )
 
-object WakeApi {
+/** The network seam: everything the app asks of a connection. Faked in tests. */
+interface WakeRepository {
+    suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>>
+    suspend fun run(connection: Connection, command: String): Result<Unit>
+    suspend fun status(connection: Connection, command: String): Result<Boolean>
+    suspend fun stats(connection: Connection, command: String, count: Int = 1): Result<PingStats>
+}
+
+object WakeApi : WakeRepository {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
@@ -28,7 +36,7 @@ object WakeApi {
         .callTimeout(25, TimeUnit.SECONDS)
         .build()
 
-    suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> =
+    override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> =
         request(connection, "commands", post = false).map { body ->
             val array = JSONObject(body).getJSONArray("commands")
             (0 until array.length()).map { i ->
@@ -37,13 +45,13 @@ object WakeApi {
             }
         }
 
-    suspend fun run(connection: Connection, command: String): Result<Unit> =
+    override suspend fun run(connection: Connection, command: String): Result<Unit> =
         request(connection, "run/$command", post = true).map { }
 
-    suspend fun status(connection: Connection, command: String): Result<Boolean> =
+    override suspend fun status(connection: Connection, command: String): Result<Boolean> =
         stats(connection, command, count = 1).map { it.awake }
 
-    suspend fun stats(connection: Connection, command: String, count: Int = 1): Result<PingStats> =
+    override suspend fun stats(connection: Connection, command: String, count: Int): Result<PingStats> =
         request(connection, "status/$command?count=$count", post = false, probe = count > 1)
             .map { body ->
                 val obj = JSONObject(body)
