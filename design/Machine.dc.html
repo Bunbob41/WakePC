@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #0b0d0f; }
+    a { color: #45d06d; } a:hover { color: #6fe392; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; background: linear-gradient(180deg, #0d0f12 0%, #0b0d0f 120px); color: #e6e3dc; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+  <div style="display: flex; align-items: center; gap: 14px; padding: 30px 20px 26px 20px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 18l-6-6 6-6"></path>
+    </svg>
+    <div style="font-size: 13px; font-weight: 700; letter-spacing: 3px;">NEW MACHINE</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 22px; padding: 0 20px;">
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">NAME</div>
+      <div style="border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 13px 14px; font-size: 14px;">desk pc</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">CONNECTION</div>
+      <div style="display: flex; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; border: 1px solid #ff5d49; background: #1c1210; border-radius: 6px; padding: 10px 14px; font-size: 12px;">
+          <span style="width: 8px; height: 8px; background: #ff5d49; border-radius: 50%; box-shadow: 0 0 8px 1px rgba(255, 93, 73, 0.6);"></span>my pi
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #5f6871;">
+          <span style="width: 8px; height: 8px; background: #45d06d; border-radius: 50%;"></span>pauls pi
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">BUTTONS · FROM MY PI</div>
+
+      <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #2b4a36; background: #101712; border-radius: 6px; padding: 14px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#45d06d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+        <span style="font-size: 13px;">wake-pc</span>
+        <span style="margin-left: auto; font-size: 9px; letter-spacing: 1.5px; color: #45d06d;">PING</span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #2b4a36; background: #101712; border-radius: 6px; padding: 14px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#45d06d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+        <span style="font-size: 13px;">suspend-pc</span>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 14px;">
+        <span style="width: 15px; height: 15px; border: 1.5px solid #3a434c; border-radius: 3px; box-sizing: border-box;"></span>
+        <span style="font-size: 13px; color: #8a9096;">reboot-pi</span>
+      </div>
+
+      <div style="font-size: 11px; color: #3a434c; line-height: 1.7;">fetched from my pi — add commands in its config file and they appear here</div>
+    </div>
+
+  </div>
+
+  <div style="margin: auto 20px 28px 20px; background: #e6e3dc; color: #0b0d0f; border-radius: 8px; padding: 17px; text-align: center; font-size: 13px; font-weight: 700; letter-spacing: 1px;">save machine</div>
+
+</div>
+</x-dc>
+</body>
+</html>

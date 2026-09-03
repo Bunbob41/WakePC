@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #0b0d0f; }
+    a { color: #45d06d; } a:hover { color: #6fe392; }
+    @keyframes wake-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; background: #0b0d0f; color: #e6e3dc; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 30px 20px 20px 20px;">
+    <div style="font-size: 13px; font-weight: 700; letter-spacing: 4px;">WAKEPC</div>
+    <div style="font-size: 10px; color: #5f6871; letter-spacing: 1.5px;">2 CONNECTIONS</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px; padding: 0 20px;">
+
+    <div style="border: 1px solid #1e242a; background: #101315; border-radius: 8px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #ff5d49; box-shadow: 0 0 8px 1px rgba(255, 93, 73, 0.6);"></span>
+        <span style="font-size: 15px; font-weight: 500;">Desk PC</span>
+        <span style="margin-left: auto; font-size: 10px; color: #45d06d; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(69, 208, 109, 0.75);">AWAKE</span>
+      </div>
+      <div style="margin-top: 5px; font-size: 10px; color: #3a434c; padding-left: 18px;">via my pi</div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <div style="border: 1px solid #242b31; border-radius: 4px; padding: 10px 16px; font-size: 12px; color: #aab2b9;">wake</div>
+        <div style="border: 1px solid #242b31; border-radius: 4px; padding: 10px 16px; font-size: 12px; color: #aab2b9;">suspend</div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #1e242a; background: #101315; border-radius: 8px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #ff5d49; box-shadow: 0 0 8px 1px rgba(255, 93, 73, 0.6);"></span>
+        <span style="font-size: 15px; font-weight: 500;">Pi</span>
+        <span style="margin-left: auto; font-size: 10px; color: #45d06d; letter-spacing: 1.5px;">ONLINE</span>
+      </div>
+      <div style="margin-top: 5px; font-size: 10px; color: #3a434c; padding-left: 18px;">via my pi</div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <div style="border: 1px solid #242b31; border-radius: 4px; padding: 10px 16px; font-size: 12px; color: #aab2b9;">reboot</div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #3a2a17; background: #14100b; border-radius: 8px; padding: 16px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #45d06d; box-shadow: 0 0 10px 2px rgba(69, 208, 109, 0.65); animation: wake-pulse 1.4s ease-in-out infinite;"></span>
+        <span style="font-size: 15px; font-weight: 500;">Paul's PC</span>
+        <span style="margin-left: auto; font-size: 10px; color: #e2a63d; letter-spacing: 1.5px; text-shadow: 0 0 8px rgba(226, 166, 61, 0.75); animation: wake-pulse 1.6s ease-in-out infinite;">WAKING · 0:12</span>
+      </div>
+      <div style="margin-top: 5px; font-size: 10px; color: #3a434c; padding-left: 18px;">via pauls pi</div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <div style="border: 1px solid #e2a63d; border-radius: 4px; padding: 10px 16px; font-size: 12px; color: #e2a63d;">wake</div>
+      </div>
+    </div>
+
+    <div style="border: 1px dashed #242b31; border-radius: 8px; padding: 14px; text-align: center; font-size: 12px; color: #5f6871;">+ add machine</div>
+  </div>
+
+  <div style="margin-top: auto; display: flex; justify-content: flex-end; padding: 0 22px 24px 0;">
+    <div style="width: 64px; height: 64px; border-radius: 50%; background: #101315; border: 2px solid #ff5d49; box-shadow: 0 0 18px rgba(255, 93, 73, 0.35); display: flex; align-items: center; justify-content: center; box-sizing: border-box;">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e6e3dc" stroke-width="2" stroke-linecap="round">
+        <path d="M12 3v9"></path>
+        <path d="M17.8 6.2a8 8 0 1 1-11.6 0"></path>
+      </svg>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

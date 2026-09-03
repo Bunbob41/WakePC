@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Home" },
+    { "file": "Empty.dc.html", "x": 480, "y": 0, "w": 390, "h": 844, "title": "First run" },
+    { "file": "Settings.dc.html", "x": 960, "y": 0, "w": 390, "h": 844, "title": "Settings" },
+    { "file": "Connection.dc.html", "x": 0, "y": 1060, "w": 390, "h": 844, "title": "Connection editor" },
+    { "file": "Machine.dc.html", "x": 480, "y": 1060, "w": 390, "h": 844, "title": "Machine editor" }
+  ],
+  "annotations": [
+    { "id": "note-final", "x": 0, "y": -170, "w": 620, "text": "M1 locked — the whole app in the final direction. Home: machine cards + banner hero pinned in the thumb zone. First run walks you straight into adding a connection. Settings holds the hero picker + style (banner/dial/mini all ship), the tile assignment, and connections." },
+    { "id": "note-editors", "x": 0, "y": 2010, "w": 620, "text": "Editors: a connection is authenticated once (test fetches its commands as proof). A machine picks a connection and checks off which of its commands become buttons — PING marks ones that can report awake/online. Swap a machine's connection later and its buttons re-aim, exactly the red→green trick." }
+  ],
+  "launch": { "view": "canvas" }
+}

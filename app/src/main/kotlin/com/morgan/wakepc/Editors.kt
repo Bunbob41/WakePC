@@ -1,0 +1,444 @@
+package com.morgan.wakepc
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+
+val connectionColors = listOf(
+    0xFFFF5D49, 0xFF45D06D, 0xFFE2A63D, 0xFF4AA3FF, 0xFFA06BFF, 0xFF3ECFC0,
+)
+
+@Composable
+fun EditorScaffold(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 26.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TintedIcon(
+                R.drawable.ic_back, Palette.dim,
+                modifier = Modifier.clickable(onClick = onBack),
+            )
+            Spacer(modifier = Modifier.size(14.dp))
+            ConsoleText(title, size = 13, weight = FontWeight.Bold, letterSpacing = 3.0)
+        }
+        content()
+    }
+}
+
+@Composable
+fun EmptyScreen(onAddConnection: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TintedIcon(R.drawable.ic_power_stroke, Palette.red, size = 15.dp)
+            Spacer(modifier = Modifier.size(10.dp))
+            ConsoleText("WAKEPC", size = 13, weight = FontWeight.Bold, letterSpacing = 4.0)
+        }
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 44.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            TintedIcon(R.drawable.ic_power_stroke, Palette.dashed, size = 52.dp)
+            ConsoleText(
+                "no connections yet",
+                size = 15,
+                weight = FontWeight.Medium,
+                modifier = Modifier.padding(top = 28.dp),
+            )
+            androidx.compose.material3.Text(
+                text = "wakepc talks to a tiny service on your pi. add your first connection, and its commands become buttons here.",
+                color = Palette.dim,
+                fontSize = 11.sp,
+                fontFamily = Mono,
+                lineHeight = 21.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = 14.dp),
+            )
+        }
+        PrimaryButton(
+            "add connection",
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+            onClick = onAddConnection,
+        )
+    }
+}
+
+@Composable
+fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var loaded by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var color by remember { mutableStateOf(connectionColors.first()) }
+    var baseUrl by remember { mutableStateOf("") }
+    var fallbackUrl by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+    var testResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
+    val newId = remember { java.util.UUID.randomUUID().toString() }
+
+    LaunchedEffect(connectionId) {
+        val existing = store.current().connection(connectionId)
+        if (existing != null) {
+            name = existing.name
+            color = existing.color
+            baseUrl = existing.baseUrl
+            fallbackUrl = existing.fallbackUrl
+            token = existing.token
+        }
+        loaded = true
+    }
+    if (!loaded) return
+
+    fun draft() = Connection(
+        id = connectionId ?: newId,
+        name = name.trim(),
+        color = color,
+        baseUrl = cleanUrl(baseUrl),
+        fallbackUrl = cleanUrl(fallbackUrl),
+        token = cleanToken(token),
+    )
+
+    EditorScaffold(if (connectionId == null) "NEW CONNECTION" else "EDIT CONNECTION", onBack = onDone) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("NAME")
+                ConsoleField(name, { name = it }, placeholder = "my pi")
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionLabel("COLOR")
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    connectionColors.forEach { c ->
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color(c), RoundedCornerShape(6.dp))
+                                .then(
+                                    if (c == color) {
+                                        Modifier.border(2.dp, Palette.text, RoundedCornerShape(6.dp))
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .clickable { color = c },
+                        )
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("ADDRESS")
+                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "http://100.x.y.z:8787")
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("FALLBACK ADDRESS · OPTIONAL")
+                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "http://pi-name:8787")
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("TOKEN")
+                ConsoleField(token, { token = it }, secret = true)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Palette.selBg, RoundedCornerShape(6.dp))
+                    .border(1.dp, Palette.selBorder, RoundedCornerShape(6.dp))
+                    .clickable {
+                        scope.launch {
+                            testResult = "testing…" to Palette.dim
+                            testResult = WakeApi.fetchCommands(draft()).fold(
+                                onSuccess = { cmds ->
+                                    "ok — found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
+                                },
+                                onFailure = { "failed: ${it.message}" to Palette.red },
+                            )
+                        }
+                    }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ConsoleText("test connection", size = 13, color = Palette.green, letterSpacing = 1.0)
+            }
+            testResult?.let { (text, color) ->
+                ConsoleText(text, size = 12, color = color)
+            }
+            if (connectionId != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch {
+                                store.update { s ->
+                                    val machines = s.machines.filterNot { it.connectionId == connectionId }
+                                    val ids = machines.map { it.id }.toSet()
+                                    s.copy(
+                                        connections = s.connections.filterNot { it.id == connectionId },
+                                        machines = machines,
+                                        hero = s.hero?.takeIf { it.machineId in ids },
+                                        tile = s.tile?.takeIf { it.machineId in ids },
+                                    )
+                                }
+                                onDone()
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ConsoleText("delete connection", size = 12, color = Palette.red)
+                }
+            }
+        }
+        PrimaryButton(
+            "save connection",
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
+        ) {
+            scope.launch {
+                val cleaned = draft()
+                store.update { s ->
+                    val index = s.connections.indexOfFirst { it.id == cleaned.id }
+                    s.copy(
+                        connections = if (index >= 0) {
+                            s.connections.toMutableList().apply { set(index, cleaned) }
+                        } else {
+                            s.connections + cleaned
+                        },
+                    )
+                }
+                onDone()
+            }
+        }
+    }
+}
+
+@Composable
+fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var loaded by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var connectionId by remember { mutableStateOf<String?>(null) }
+    var selected by remember { mutableStateOf<List<CommandRef>>(emptyList()) }
+    var available by remember { mutableStateOf<List<CommandRef>?>(null) }
+    var fetchError by remember { mutableStateOf<String?>(null) }
+    var connections by remember { mutableStateOf<List<Connection>>(emptyList()) }
+
+    LaunchedEffect(machineId) {
+        val state = store.current()
+        connections = state.connections
+        val existing = state.machine(machineId)
+        if (existing != null) {
+            name = existing.name
+            connectionId = existing.connectionId
+            selected = existing.commands
+        } else {
+            connectionId = state.connections.firstOrNull()?.id
+        }
+        loaded = true
+    }
+    if (!loaded) return
+
+    val connection = connections.firstOrNull { it.id == connectionId }
+
+    LaunchedEffect(connectionId) {
+        available = null
+        fetchError = null
+        val conn = connections.firstOrNull { it.id == connectionId } ?: return@LaunchedEffect
+        WakeApi.fetchCommands(conn).fold(
+            onSuccess = { available = it },
+            onFailure = { fetchError = it.message },
+        )
+    }
+
+    EditorScaffold(if (machineId == null) "NEW MACHINE" else "EDIT MACHINE", onBack = onDone) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("NAME")
+                ConsoleField(name, { name = it }, placeholder = "desk pc")
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionLabel("CONNECTION")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    connections.forEach { conn ->
+                        val isSel = conn.id == connectionId
+                        Row(
+                            modifier = Modifier
+                                .background(
+                                    if (isSel) Color(conn.color).copy(alpha = 0.09f) else Palette.card,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSel) Color(conn.color) else Palette.border,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .clickable { connectionId = conn.id }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(conn.color), CircleShape),
+                            )
+                            ConsoleText(
+                                conn.name,
+                                size = 12,
+                                color = if (isSel) Palette.text else Palette.dim,
+                            )
+                        }
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionLabel("BUTTONS · FROM ${connection?.name?.uppercase() ?: "?"}")
+                when {
+                    fetchError != null ->
+                        ConsoleText("couldn't reach: $fetchError", size = 11, color = Palette.red)
+                    available == null ->
+                        ConsoleText("fetching commands…", size = 11, color = Palette.dim)
+                    else -> available.orEmpty().forEach { cmd ->
+                        val isSel = selected.any { it.name == cmd.name }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(if (isSel) Palette.selBg else Palette.card, RoundedCornerShape(6.dp))
+                                .border(
+                                    1.dp,
+                                    if (isSel) Palette.selBorder else Palette.border,
+                                    RoundedCornerShape(6.dp),
+                                )
+                                .clickable {
+                                    selected = if (isSel) {
+                                        selected.filterNot { it.name == cmd.name }
+                                    } else {
+                                        selected + cmd
+                                    }
+                                }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (isSel) {
+                                TintedIcon(R.drawable.ic_check, Palette.green, size = 15.dp)
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .border(1.dp, Palette.faint, RoundedCornerShape(3.dp)),
+                                )
+                            }
+                            ConsoleText(
+                                cmd.name,
+                                size = 13,
+                                color = if (isSel) Palette.text else Palette.sub,
+                                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                            )
+                            if (cmd.ping) {
+                                ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
+                            }
+                        }
+                    }
+                }
+                ConsoleText(
+                    "fetched from the connection — add commands in its config file and they appear here",
+                    size = 11,
+                    color = Palette.faint,
+                )
+            }
+            if (machineId != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch {
+                                store.update { s ->
+                                    s.copy(
+                                        machines = s.machines.filterNot { it.id == machineId },
+                                        hero = s.hero?.takeIf { it.machineId != machineId },
+                                        tile = s.tile?.takeIf { it.machineId != machineId },
+                                    )
+                                }
+                                onDone()
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ConsoleText("delete machine", size = 12, color = Palette.red)
+                }
+            }
+        }
+        PrimaryButton(
+            "save machine",
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
+        ) {
+            val connId = connectionId ?: return@PrimaryButton
+            scope.launch {
+                store.update { s ->
+                    val machine = (s.machine(machineId) ?: Machine()).copy(
+                        name = name.trim(),
+                        connectionId = connId,
+                        commands = selected,
+                    )
+                    val index = s.machines.indexOfFirst { it.id == machine.id }
+                    val machines = if (index >= 0) {
+                        s.machines.toMutableList().apply { set(index, machine) }
+                    } else {
+                        s.machines + machine
+                    }
+                    val defaultRef = machine.commands.firstOrNull()
+                        ?.let { ButtonRef(machine.id, it.name) }
+                    s.copy(
+                        machines = machines,
+                        hero = s.hero ?: defaultRef,
+                        tile = s.tile ?: defaultRef,
+                    )
+                }
+                onDone()
+            }
+        }
+    }
+}

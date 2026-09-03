@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #f5f3ee; }
+    a { color: #b3541e; } a:hover { color: #8f4318; }
+    @keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; background: #f5f3ee; color: #191a17; font-family: Archivo, 'Helvetica Neue', Helvetica, sans-serif; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+  <div style="padding: 34px 24px 6px 24px; display: flex; align-items: baseline; justify-content: space-between;">
+    <div style="font-size: 13px; font-weight: 700; letter-spacing: 3px;">WAKEPC</div>
+    <div style="font-size: 12px; color: #8a8478;">Edit</div>
+  </div>
+  <div style="padding: 0 24px 24px 24px; font-size: 12px; color: #8a8478;">4 buttons · 2 connections</div>
+
+  <div style="display: flex; flex-direction: column;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 24px; border-top: 1px solid #ddd8cc;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.4px;">Wake PC</div>
+        <div style="font-size: 12px; color: #8a8478;">My Pi</div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 7px;">
+        <span style="width: 11px; height: 11px; border-radius: 50%; background: #c8452c;"></span>
+        <span style="font-size: 11px; color: #8a8478;">Awake</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 24px; border-top: 1px solid #ddd8cc;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.4px;">Suspend PC</div>
+        <div style="font-size: 12px; color: #8a8478;">My Pi</div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 7px;">
+        <span style="width: 11px; height: 11px; border-radius: 50%; background: #c8452c;"></span>
+        <span style="font-size: 11px; color: #b8b2a4;">Ready</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 24px; border-top: 1px solid #ddd8cc;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.4px;">Reboot Pi</div>
+        <div style="font-size: 12px; color: #8a8478;">My Pi</div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 7px;">
+        <span style="width: 11px; height: 11px; border-radius: 50%; background: #c8452c;"></span>
+        <span style="font-size: 11px; color: #b8b2a4;">Ready</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 24px; border-top: 1px solid #ddd8cc; border-bottom: 1px solid #ddd8cc;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.4px;">Wake Paul's PC</div>
+        <div style="font-size: 12px; color: #8a8478;">Paul's Pi</div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 7px;">
+        <span style="width: 11px; height: 11px; border-radius: 50%; background: #3f8f4f; animation: soft-pulse 1.6s ease-in-out infinite;"></span>
+        <span style="font-size: 11px; color: #a5721f;">Waking…</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="padding: 24px; font-size: 14px; color: #8a8478;">+ Add button</div>
+
+</div>
+</x-dc>
+</body>
+</html>

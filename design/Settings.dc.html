@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #0b0d0f; }
+    a { color: #45d06d; } a:hover { color: #6fe392; }
+  </style>
+</helmet>
+<div style="width: 390px; height: 844px; background: linear-gradient(180deg, #0d0f12 0%, #0b0d0f 120px); color: #e6e3dc; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+  <div style="display: flex; align-items: center; gap: 14px; padding: 30px 20px 26px 20px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5f6871" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 18l-6-6 6-6"></path>
+    </svg>
+    <div style="font-size: 13px; font-weight: 700; letter-spacing: 3px;">SETTINGS</div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 26px; padding: 0 20px;">
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">HERO BUTTON</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 14px;">
+        <span style="font-size: 13px;">wake · desk pc</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3a434c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 6l6 6-6 6"></path>
+        </svg>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+        <div style="border: 1px solid #ff5d49; background: #1c1210; border-radius: 6px; padding: 12px 0 10px 0; display: flex; flex-direction: column; align-items: center; gap: 9px;">
+          <svg width="34" height="22" viewBox="0 0 34 22">
+            <rect x="1" y="15" width="32" height="6" rx="2" fill="none" stroke="#ff5d49" stroke-width="1.5"></rect>
+            <rect x="1" y="1" width="32" height="10" rx="2" fill="none" stroke="#3a434c" stroke-width="1"></rect>
+          </svg>
+          <span style="font-size: 10px; letter-spacing: 1px;">banner</span>
+        </div>
+        <div style="border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 12px 0 10px 0; display: flex; flex-direction: column; align-items: center; gap: 9px;">
+          <svg width="34" height="22" viewBox="0 0 34 22">
+            <circle cx="17" cy="14" r="7" fill="none" stroke="#5f6871" stroke-width="1.5"></circle>
+            <rect x="1" y="1" width="32" height="4" rx="1.5" fill="none" stroke="#3a434c" stroke-width="1"></rect>
+          </svg>
+          <span style="font-size: 10px; letter-spacing: 1px; color: #5f6871;">dial</span>
+        </div>
+        <div style="border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 12px 0 10px 0; display: flex; flex-direction: column; align-items: center; gap: 9px;">
+          <svg width="34" height="22" viewBox="0 0 34 22">
+            <circle cx="28" cy="16" r="4.5" fill="none" stroke="#5f6871" stroke-width="1.5"></circle>
+            <rect x="1" y="1" width="32" height="7" rx="2" fill="none" stroke="#3a434c" stroke-width="1"></rect>
+          </svg>
+          <span style="font-size: 10px; letter-spacing: 1px; color: #5f6871;">mini</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">QUICK SETTINGS TILE</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 14px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 13px;">wake · desk pc</span>
+          <span style="font-size: 10px; color: #5f6871;">fires from the notification shade</span>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3a434c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 6l6 6-6 6"></path>
+        </svg>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; letter-spacing: 2px; color: #5f6871;">CONNECTIONS</div>
+      <div style="display: flex; align-items: center; gap: 11px; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 14px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #ff5d49; box-shadow: 0 0 8px 1px rgba(255, 93, 73, 0.6);"></span>
+        <span style="font-size: 13px;">my pi</span>
+        <span style="margin-left: auto; font-size: 10px; color: #45d06d; letter-spacing: 1.5px;">ONLINE</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 11px; border: 1px solid #1e242a; background: #101315; border-radius: 6px; padding: 14px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #45d06d; box-shadow: 0 0 8px 1px rgba(69, 208, 109, 0.6);"></span>
+        <span style="font-size: 13px;">pauls pi</span>
+        <span style="margin-left: auto; font-size: 10px; color: #45d06d; letter-spacing: 1.5px;">ONLINE</span>
+      </div>
+      <div style="border: 1px dashed #242b31; border-radius: 6px; padding: 13px; text-align: center; font-size: 12px; color: #5f6871;">+ add connection</div>
+    </div>
+
+  </div>
+
+  <div style="margin: auto 0 26px 0; text-align: center; font-size: 10px; color: #3a434c;">wakepc 0.3.0 · talks only to your tailnet</div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,22 +1,27 @@
-# Copy to /etc/wakepc.conf, then: sudo chmod 600 /etc/wakepc.conf
+# Copy to /etc/wakepc.conf, then: sudo chown wakepc:wakepc /etc/wakepc.conf && sudo chmod 600 /etc/wakepc.conf
 [wakepc]
-# Generate with: openssl rand -hex 32
+# Generate with: openssl rand -hex 32 — this is what you paste into the app.
 token = REPLACE_ME
 
-# The PC's ethernet MAC address (the NIC that has Wake-on-LAN enabled).
-# Find it on the PC with: ipconfig /all  (look for "Physical Address")
-mac = AA:BB:CC:DD:EE:FF
-
-# The PC's LAN IP, used by /status to ping it. Give the PC a DHCP
-# reservation in your router so this doesn't drift.
-pc_ip = 192.168.1.50
-
-# LAN broadcast address. 255.255.255.255 usually works; if not, use your
-# subnet's broadcast, e.g. 192.168.1.255.
-broadcast_ip = 255.255.255.255
-
-# Bind to the Pi's Tailscale IP so the service is unreachable from the LAN
-# and the wider internet. Find it with: tailscale ip -4
+# Bind to the Pi's Tailscale IP (tailscale ip -4) so only the tailnet can reach it.
 bind_host = 0.0.0.0
-
 port = 8787
+
+# Each [command:<name>] becomes a button the app can invoke — by name only,
+# the phone can never send shell. Two run kinds:
+#   run = WOL <mac>        broadcast a wake-on-lan magic packet
+#   run = shell <cmdline>  run a shell command as the wakepc user
+# Optional per command:
+#   ping = <ip>            lets the app show awake/asleep for this command
+#   broadcast_ip = <ip>    WOL only; default 255.255.255.255
+
+[command:wake-pc]
+run = WOL AA:BB:CC:DD:EE:FF
+ping = 192.168.1.50
+broadcast_ip = 192.168.1.255
+
+# Shell commands run as the unprivileged wakepc user. For privileged ones,
+# add a sudoers rule, e.g. in /etc/sudoers.d/wakepc:
+#   wakepc ALL=(root) NOPASSWD: /usr/sbin/reboot
+[command:reboot-pi]
+run = shell sudo /usr/sbin/reboot
