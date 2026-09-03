@@ -8,11 +8,24 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
+data class PingStats(
+    val awake: Boolean,
+    val lossPct: Double,
+    val minMs: Double?,
+    val avgMs: Double?,
+    val maxMs: Double?,
+)
+
 object WakeApi {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .callTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    // Multi-ping probes take count seconds server-side; give them room.
+    private val probeClient = client.newBuilder()
+        .callTimeout(25, TimeUnit.SECONDS)
         .build()
 
     suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> =
@@ -28,31 +41,56 @@ object WakeApi {
         request(connection, "run/$command", post = true).map { }
 
     suspend fun status(connection: Connection, command: String): Result<Boolean> =
-        request(connection, "status/$command", post = false)
-            .map { JSONObject(it).getBoolean("awake") }
+        stats(connection, command, count = 1).map { it.awake }
 
-    /** Tries the primary address, then the fallback. */
-    private suspend fun request(connection: Connection, path: String, post: Boolean): Result<String> =
-        withContext(Dispatchers.IO) {
-            val bases = listOf(connection.baseUrl, connection.fallbackUrl).filter { it.isNotBlank() }
-            if (bases.isEmpty()) {
-                return@withContext Result.failure(IllegalStateException("no address configured"))
+    suspend fun stats(connection: Connection, command: String, count: Int = 1): Result<PingStats> =
+        request(connection, "status/$command?count=$count", post = false, probe = count > 1)
+            .map { body ->
+                val obj = JSONObject(body)
+                val awake = obj.getBoolean("awake")
+                PingStats(
+                    awake = awake,
+                    lossPct = obj.optDouble("loss_pct", if (awake) 0.0 else 100.0),
+                    minMs = obj.optDouble("min_ms").takeIf { !it.isNaN() },
+                    avgMs = obj.optDouble("avg_ms").takeIf { !it.isNaN() },
+                    maxMs = obj.optDouble("max_ms").takeIf { !it.isNaN() },
+                )
             }
-            var failure: Throwable? = null
-            for (base in bases) {
-                val attempt = runCatching {
-                    val builder = Request.Builder()
-                        .url("$base/$path")
-                        .header("Authorization", "Bearer ${connection.token}")
-                    if (post) builder.post(ByteArray(0).toRequestBody())
-                    client.newCall(builder.build()).execute().use { response ->
-                        check(response.isSuccessful) { "HTTP ${response.code}" }
-                        response.body.string()
-                    }
-                }
-                if (attempt.isSuccess) return@withContext attempt
-                failure = attempt.exceptionOrNull()
-            }
-            Result.failure(failure ?: IllegalStateException("unreachable"))
+
+    /** Tries the primary address, then the fallback; logs the outcome to the console. */
+    private suspend fun request(
+        connection: Connection,
+        path: String,
+        post: Boolean,
+        probe: Boolean = false,
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val method = if (post) "POST" else "GET"
+        val label = "$method /${path.substringBefore('?')} @ ${connection.name.ifBlank { "?" }}"
+        val bases = listOf(connection.baseUrl, connection.fallbackUrl).filter { it.isNotBlank() }
+        if (bases.isEmpty()) {
+            AppLog.log("$label · no address configured", ok = false)
+            return@withContext Result.failure(IllegalStateException("no address configured"))
         }
+        var failure: Throwable? = null
+        for (base in bases) {
+            val startedAt = System.currentTimeMillis()
+            val attempt = runCatching {
+                val builder = Request.Builder()
+                    .url("$base/$path")
+                    .header("Authorization", "Bearer ${connection.token}")
+                if (post) builder.post(ByteArray(0).toRequestBody())
+                (if (probe) probeClient else client).newCall(builder.build()).execute().use { response ->
+                    check(response.isSuccessful) { "HTTP ${response.code}" }
+                    response.body.string()
+                }
+            }
+            if (attempt.isSuccess) {
+                AppLog.log("$label · ${System.currentTimeMillis() - startedAt}ms", ok = true)
+                return@withContext attempt
+            }
+            failure = attempt.exceptionOrNull()
+        }
+        AppLog.log("$label · ${failure?.message ?: "failed"}", ok = false)
+        Result.failure(failure ?: IllegalStateException("unreachable"))
+    }
 }

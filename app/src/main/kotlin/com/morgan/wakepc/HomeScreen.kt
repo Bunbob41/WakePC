@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -37,17 +38,22 @@ import kotlinx.coroutines.launch
 
 private data class Transient(val text: String, val color: Color, val pulse: Boolean, val glow: Boolean)
 
+private fun fmtMs(value: Double): String = String.format(java.util.Locale.US, "%.1f", value)
+
 @Composable
 fun HomeScreen(
     state: AppState,
     onAddMachine: () -> Unit,
     onEditMachine: (String) -> Unit,
     onSettings: () -> Unit,
+    onConsole: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val transients = remember { mutableStateMapOf<String, Transient>() }
     val awake = remember { mutableStateMapOf<String, Boolean>() }
+    val avgMs = remember { mutableStateMapOf<String, Double>() }
     val running = remember { mutableStateMapOf<String, String>() }
+    val logLines by AppLog.lines.collectAsState()
 
     // Background status poll for machines that have a ping-able command.
     LaunchedEffect(state.machines) {
@@ -56,7 +62,10 @@ fun HomeScreen(
                 val connection = state.connection(machine.connectionId) ?: return@forEach
                 val pingCmd = machine.commands.firstOrNull { it.ping } ?: return@forEach
                 if (!running.containsKey(machine.id)) {
-                    WakeApi.status(connection, pingCmd.name).onSuccess { awake[machine.id] = it }
+                    WakeApi.stats(connection, pingCmd.name).onSuccess { stats ->
+                        awake[machine.id] = stats.awake
+                        stats.avgMs?.let { avgMs[machine.id] = it }
+                    }
                 }
             }
             delay(15_000)
@@ -66,6 +75,38 @@ fun HomeScreen(
     fun runButton(machine: Machine, connection: Connection, command: CommandRef) {
         if (running.containsKey(machine.id)) return
         runCommand(scope, machine, connection, command, transients, awake, running)
+    }
+
+    fun probe(machine: Machine, connection: Connection, command: CommandRef) {
+        if (running.containsKey(machine.id)) return
+        scope.launch {
+            running[machine.id] = command.name
+            transients[machine.id] = Transient("PROBING · 5 PINGS", Palette.amber, pulse = true, glow = true)
+            val result = WakeApi.stats(connection, command.name, count = 5)
+            running.remove(machine.id)
+            result.fold(
+                onSuccess = { stats ->
+                    awake[machine.id] = stats.awake
+                    stats.avgMs?.let { avgMs[machine.id] = it }
+                    transients[machine.id] = if (stats.avgMs != null) {
+                        Transient(
+                            "${fmtMs(stats.minMs ?: stats.avgMs)}/${fmtMs(stats.avgMs)}/" +
+                                "${fmtMs(stats.maxMs ?: stats.avgMs)}MS · ${stats.lossPct.toInt()}% LOSS",
+                            if (stats.lossPct > 0) Palette.amber else Palette.green,
+                            pulse = false,
+                            glow = true,
+                        )
+                    } else {
+                        Transient("NO REPLY · 100% LOSS", Palette.red, pulse = false, glow = false)
+                    }
+                },
+                onFailure = {
+                    transients[machine.id] = Transient("UNREACHABLE", Palette.faint, pulse = false, glow = false)
+                },
+            )
+            delay(6_000)
+            transients.remove(machine.id)
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -93,14 +134,21 @@ fun HomeScreen(
         ) {
             state.machines.forEach { machine ->
                 val connection = state.connection(machine.connectionId)
+                val pingCmd = machine.commands.firstOrNull { it.ping }
                 MachineCard(
                     machine = machine,
                     connection = connection,
                     transient = transients[machine.id],
-                    awake = if (machine.commands.any { it.ping }) awake[machine.id] else null,
+                    awake = if (pingCmd != null) awake[machine.id] else null,
+                    avgMs = if (pingCmd != null) avgMs[machine.id] else null,
                     runningCommand = running[machine.id],
                     onRun = { cmd -> connection?.let { runButton(machine, it, cmd) } },
                     onEdit = { onEditMachine(machine.id) },
+                    onProbe = if (pingCmd != null && connection != null) {
+                        { probe(machine, connection, pingCmd) }
+                    } else {
+                        null
+                    },
                 )
             }
             Box(
@@ -114,6 +162,22 @@ fun HomeScreen(
                 ConsoleText("+ add machine", size = 12, color = Palette.dim)
             }
             Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        logLines.lastOrNull()?.let { last ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onConsole)
+                    .padding(horizontal = 20.dp, vertical = 5.dp),
+            ) {
+                ConsoleText(
+                    "> ${last.text}",
+                    size = 10,
+                    color = if (last.ok == false) Palette.red else Palette.faint,
+                    maxLines = 1,
+                )
+            }
         }
 
         val hero = state.resolve(state.hero)
@@ -190,9 +254,11 @@ private fun MachineCard(
     connection: Connection?,
     transient: Transient?,
     awake: Boolean?,
+    avgMs: Double?,
     runningCommand: String?,
     onRun: (CommandRef) -> Unit,
     onEdit: () -> Unit,
+    onProbe: (() -> Unit)?,
 ) {
     val active = transient != null && transient.color == Palette.amber
     Column(
@@ -211,11 +277,23 @@ private fun MachineCard(
             Spacer(modifier = Modifier.size(2.dp))
             ConsoleText(machine.name.ifBlank { "unnamed" }, size = 15, weight = FontWeight.Medium)
             Spacer(modifier = Modifier.weight(1f))
-            when {
-                transient != null ->
-                    StatusText(transient.text, transient.color, pulse = transient.pulse, glow = transient.glow)
-                awake == true -> StatusText("AWAKE", Palette.green, glow = true)
-                awake == false -> StatusText("ASLEEP", Palette.faint)
+            Box(
+                modifier = if (onProbe != null) {
+                    Modifier.clickable(onClick = onProbe).padding(4.dp)
+                } else {
+                    Modifier
+                },
+            ) {
+                when {
+                    transient != null ->
+                        StatusText(transient.text, transient.color, pulse = transient.pulse, glow = transient.glow)
+                    awake == true -> StatusText(
+                        "AWAKE" + (avgMs?.let { " · ${fmtMs(it)}MS" } ?: ""),
+                        Palette.green,
+                        glow = true,
+                    )
+                    awake == false -> StatusText("ASLEEP", Palette.faint)
+                }
             }
         }
         ConsoleText(

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
+    data object Console : Screen
     data class EditConnection(val id: String?, val fromEmpty: Boolean = false) : Screen
     data class EditMachine(val id: String?) : Screen
 }
@@ -67,8 +68,11 @@ private fun App(store: Store) {
                     onAddMachine = { screen = Screen.EditMachine(null) },
                     onEditMachine = { screen = Screen.EditMachine(it) },
                     onSettings = { screen = Screen.Settings },
+                    onConsole = { screen = Screen.Console },
                 )
             }
+
+        Screen.Console -> ConsoleScreen(onBack = { screen = Screen.Home })
 
         Screen.Settings -> SettingsScreen(
             store = store,

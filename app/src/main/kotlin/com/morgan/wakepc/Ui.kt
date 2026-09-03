@@ -121,6 +121,7 @@ fun ConsoleText(
     color: Color = Palette.text,
     weight: FontWeight = FontWeight.Normal,
     letterSpacing: Double = 0.0,
+    maxLines: Int = Int.MAX_VALUE,
     modifier: Modifier = Modifier,
 ) {
     androidx.compose.material3.Text(
@@ -130,6 +131,8 @@ fun ConsoleText(
         fontFamily = Mono,
         fontWeight = weight,
         letterSpacing = letterSpacing.sp,
+        maxLines = maxLines,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         modifier = modifier,
     )
 }

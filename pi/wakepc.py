@@ -20,6 +20,7 @@ import re
 import socket
 import subprocess
 import sys
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 CONFIG_PATH = "/etc/wakepc.conf"
@@ -85,13 +86,27 @@ def send_magic_packet(mac_hex: str, broadcast_ip: str) -> None:
             sock.sendto(payload, (broadcast_ip, 9))
 
 
-def host_answers_ping(ip: str) -> bool:
-    result = subprocess.run(
-        ["ping", "-c", "1", "-W", "1", ip],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    return result.returncode == 0
+def probe_ping(ip: str, count: int) -> dict:
+    """Ping `ip` `count` times and report awake + rtt stats (iputils output)."""
+    count = max(1, min(count, 10))
+    args = ["ping", "-c", str(count), "-W", "1"]
+    if count > 1:
+        args += ["-i", "1"]
+    args.append(ip)
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=count * 2 + 3)
+    except subprocess.TimeoutExpired:
+        return {"awake": False, "sent": count, "loss_pct": 100.0}
+    body = {"awake": result.returncode == 0, "sent": count}
+    loss = re.search(r"(\d+(?:\.\d+)?)% packet loss", result.stdout)
+    if loss:
+        body["loss_pct"] = float(loss.group(1))
+    rtt = re.search(r"= ([\d.]+)/([\d.]+)/([\d.]+)", result.stdout)
+    if rtt:
+        body["min_ms"] = float(rtt.group(1))
+        body["avg_ms"] = float(rtt.group(2))
+        body["max_ms"] = float(rtt.group(3))
+    return body
 
 
 def run_command(cmd: Command) -> dict:
@@ -124,24 +139,30 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self._authorized():
             return self._reply(401, {"error": "unauthorized"})
-        if self.path == "/commands":
+        parsed = urllib.parse.urlparse(self.path)
+        query = urllib.parse.parse_qs(parsed.query)
+        try:
+            count = int(query.get("count", ["1"])[0])
+        except ValueError:
+            count = 1
+        if parsed.path == "/commands":
             listing = [
                 {"name": c.name, "ping": c.ping is not None}
                 for c in self.config["commands"].values()
             ]
             return self._reply(200, {"commands": listing})
-        if self.path.startswith("/status/"):
-            cmd = self._command(self.path[len("/status/"):])
+        if parsed.path.startswith("/status/"):
+            cmd = self._command(parsed.path[len("/status/"):])
             if cmd is None:
                 return self._reply(404, {"error": "unknown command"})
             if cmd.ping is None:
                 return self._reply(404, {"error": "command has no ping"})
-            return self._reply(200, {"awake": host_answers_ping(cmd.ping)})
-        if self.path == "/status":  # legacy 0.1
+            return self._reply(200, probe_ping(cmd.ping, count))
+        if parsed.path == "/status":  # legacy 0.1
             cmd = next((c for c in self.config["commands"].values() if c.ping), None)
             if cmd is None:
                 return self._reply(404, {"error": "no ping-able command"})
-            return self._reply(200, {"awake": host_answers_ping(cmd.ping)})
+            return self._reply(200, probe_ping(cmd.ping, 1))
         self._reply(404, {"error": "not found"})
 
     def do_POST(self):
