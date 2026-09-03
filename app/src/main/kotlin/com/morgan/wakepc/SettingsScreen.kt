@@ -196,5 +196,5 @@ private fun SettingsRow(value: String, hint: String?, onClick: () -> Unit) {
 }
 
 object BuildConfigVersion {
-    const val NAME = "0.4.0"
+    const val NAME = "0.5.0"
 }

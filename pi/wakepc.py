@@ -17,6 +17,8 @@ Stdlib only — no pip installs. See wakepc.conf.example for the config format.
 import configparser
 import json
 import re
+import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -41,8 +43,8 @@ def load_config():
         sys.exit(f"error: could not read {CONFIG_PATH}")
     main = parser["wakepc"]
     token = main.get("token", "")
-    if len(token) < 16:
-        sys.exit("error: token must be at least 16 characters")
+    if len(token) < 12:
+        sys.exit("error: token must be at least 12 characters (try: wakepc.py genpass)")
 
     commands = {}
     for section in parser.sections():
@@ -188,6 +190,46 @@ class Handler(BaseHTTPRequestHandler):
         print(f"{self.address_string()} {fmt % args}", flush=True)
 
 
+WORDS = (
+    "acorn apple arrow badger bamboo basil beach bear berry birch bison blaze bloom "
+    "breeze brick brook bubble cabin candle canyon cedar cherry cliff cloud clover "
+    "cobalt comet coral cotton crane creek cricket crystal daisy dawn delta denim "
+    "drift eagle ember fable falcon fern flame flint forest fox frost galaxy garnet "
+    "ginger glacier goose grape grove hazel heron honey horizon iceberg iris ivory "
+    "jade jasper juniper kayak kelp koala lagoon lantern lemon lilac lily lotus "
+    "lunar maple marble meadow mango melon mesa mint mist molten moss moth nectar "
+    "nutmeg oasis ocean olive onyx opal orbit orchid otter owl panda peach pearl "
+    "pebble penguin pepper pine planet plume pond poppy prairie prism quartz quill "
+    "rain raven reef ridge river robin rocket rose rustic saffron sage salmon sand "
+    "sapphire seal shadow shell sierra silver sleet slate snow solar sparrow spruce "
+    "star stone storm summit sunset swan thistle thunder tiger timber topaz trout "
+    "tulip tundra turtle valley velvet violet walnut wave willow winter wolf wren "
+    "zephyr zebra"
+).split()
+
+
+def generate_passphrase(words: int) -> str:
+    return "-".join(secrets.choice(WORDS) for _ in range(words))
+
+
+def print_setup_qr():
+    """Print a QR the app can scan: address + token in a wakepc:// uri."""
+    config = load_config()
+    host = config["bind_host"]
+    if host in ("", "0.0.0.0"):
+        host = socket.gethostname()
+        print(f"warning: bind_host is 0.0.0.0 — QR will use hostname '{host}'", file=sys.stderr)
+    if shutil.which("qrencode") is None:
+        sys.exit("error: qrencode not installed (apt install qrencode)")
+    uri = "wakepc://c?" + urllib.parse.urlencode({
+        "name": socket.gethostname().lower(),
+        "host": f"{host}:{config['port']}",
+        "token": config["token"],
+    })
+    subprocess.run(["qrencode", "-t", "ANSIUTF8", uri])
+    print("scan with the wakepc app: add connection -> scan setup qr")
+
+
 def main():
     config = load_config()
     Handler.config = config
@@ -198,4 +240,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "genpass":
+        count = int(sys.argv[2]) if len(sys.argv) > 2 else 4
+        print(generate_passphrase(max(3, min(count, 8))))
+    elif len(sys.argv) > 1 and sys.argv[1] == "qr":
+        print_setup_qr()
+    else:
+        main()
