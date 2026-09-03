@@ -33,6 +33,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+private val whitespace = Regex("\\s+")
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,7 +64,13 @@ private fun WakeScreen(repository: SettingsRepository) {
         token = saved.token
     }
 
-    fun settingsFromFields() = WakeSettings(baseUrl = baseUrl, token = token)
+    // Pastes from chat often drag invisible extras into a single-line field
+    // (newlines, a trailing "Token:" label), so keep only the plausible part:
+    // the first whitespace-delimited chunk for the URL, the last for the token.
+    fun settingsFromFields() = WakeSettings(
+        baseUrl = baseUrl.trim().takeWhile { !it.isWhitespace() }.trimEnd('/'),
+        token = token.trim().split(whitespace).last(),
+    )
 
     Column(
         modifier = Modifier
@@ -99,7 +107,10 @@ private fun WakeScreen(repository: SettingsRepository) {
         Button(
             onClick = {
                 scope.launch {
-                    repository.save(settingsFromFields())
+                    val settings = settingsFromFields()
+                    repository.save(settings)
+                    baseUrl = settings.baseUrl
+                    token = settings.token
                     message = "Saved."
                 }
             },
@@ -113,8 +124,10 @@ private fun WakeScreen(repository: SettingsRepository) {
                     scope.launch {
                         val settings = settingsFromFields()
                         repository.save(settings)
+                        baseUrl = settings.baseUrl
+                        token = settings.token
                         message = "Sending wake…"
-                        message = WakeApi.wake(repository.current()).fold(
+                        message = WakeApi.wake(settings).fold(
                             onSuccess = { "Magic packet sent." },
                             onFailure = { "Wake failed: ${it.message}" },
                         )
@@ -126,9 +139,12 @@ private fun WakeScreen(repository: SettingsRepository) {
                 enabled = settingsFromFields().isConfigured,
                 onClick = {
                     scope.launch {
-                        repository.save(settingsFromFields())
+                        val settings = settingsFromFields()
+                        repository.save(settings)
+                        baseUrl = settings.baseUrl
+                        token = settings.token
                         message = "Checking…"
-                        message = WakeApi.status(repository.current()).fold(
+                        message = WakeApi.status(settings).fold(
                             onSuccess = { awake -> if (awake) "PC is awake." else "PC is not responding to ping." },
                             onFailure = { "Status check failed: ${it.message}" },
                         )
