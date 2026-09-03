@@ -1,5 +1,7 @@
 # WakePC
 
+[![CI](https://github.com/Bunbob41/WakePC/actions/workflows/ci.yml/badge.svg)](https://github.com/Bunbob41/WakePC/actions/workflows/ci.yml)
+
 One-tap Wake-on-LAN (and more) for the machines at home, from anywhere, over
 Tailscale.
 
