@@ -240,10 +240,17 @@ def main():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "genpass":
+    if len(sys.argv) == 1:
+        main()
+    elif sys.argv[1] == "genpass":
         count = int(sys.argv[2]) if len(sys.argv) > 2 else 4
         print(generate_passphrase(max(3, min(count, 8))))
-    elif len(sys.argv) > 1 and sys.argv[1] == "qr":
+    elif sys.argv[1] == "qr":
         print_setup_qr()
     else:
-        main()
+        sys.exit(
+            f"unknown command: {sys.argv[1]}\n"
+            "usage: wakepc.py            run the server (systemd does this)\n"
+            "       wakepc.py genpass [n]  generate an n-word passphrase (default 4)\n"
+            "       wakepc.py qr           print the setup QR for the app"
+        )
