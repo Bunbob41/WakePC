@@ -1,9 +1,10 @@
 # Copy to /etc/wakepc.conf, then: sudo chown wakepc:wakepc /etc/wakepc.conf && sudo chmod 600 /etc/wakepc.conf
 [wakepc]
-# The app authenticates with this. Any password of 12+ characters works;
-# a word passphrase is easiest to type: python3 wakepc.py genpass 5
-#   -> e.g. maple-otter-comet-birch-flint
-# Or maximum entropy: openssl rand -hex 32
+# The app authenticates with this. Anything from a 4-digit PIN up works —
+# the server locks auth out after repeated bad guesses, and the tailnet is
+# the primary wall. Stronger options if you want them:
+#   word passphrase: python3 wakepc.py genpass 5  -> maple-otter-comet-birch-flint
+#   max entropy:     openssl rand -hex 32
 # Skip typing entirely: python3 wakepc.py qr prints a QR the app can scan.
 token = REPLACE_ME
 

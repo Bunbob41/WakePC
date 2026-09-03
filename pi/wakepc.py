@@ -22,6 +22,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -43,8 +45,8 @@ def load_config():
         sys.exit(f"error: could not read {CONFIG_PATH}")
     main = parser["wakepc"]
     token = main.get("token", "")
-    if len(token) < 12:
-        sys.exit("error: token must be at least 12 characters (try: wakepc.py genpass)")
+    if len(token) < 4:
+        sys.exit("error: token must be at least 4 characters (a PIN, or: wakepc.py genpass)")
 
     commands = {}
     for section in parser.sections():
@@ -139,8 +141,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    # Short tokens (PINs) are only sane with a guess limit: after 8 bad
+    # attempts in 5 minutes, auth rejects everything until the window clears.
+    _auth_lock = threading.Lock()
+    _auth_failures = []
+
     def _authorized(self) -> bool:
-        return self.headers.get("Authorization", "") == f"Bearer {self.config['token']}"
+        supplied = self.headers.get("Authorization", "")
+        expected = f"Bearer {self.config['token']}"
+        with Handler._auth_lock:
+            now = time.time()
+            Handler._auth_failures[:] = [t for t in Handler._auth_failures if now - t < 300]
+            if len(Handler._auth_failures) >= 8:
+                print(f"auth locked out ({self.address_string()})", flush=True)
+                return False
+            if supplied == expected:
+                return True
+            if supplied:
+                Handler._auth_failures.append(now)
+                print(f"auth failure from {self.address_string()}", flush=True)
+            return False
 
     def _command(self, name):
         return self.config["commands"].get(name)
@@ -243,7 +263,7 @@ PANEL_HTML = """<!doctype html>
 <h1><span>&#9211;</span> WAKEPC <span style="color:#5f6871">PANEL</span></h1>
 <div id="login" style="display:none">
   <div class="label">TOKEN</div>
-  <input id="tok" type="password" placeholder="from /etc/wakepc.conf">
+  <input id="tok" type="text" autocomplete="off" placeholder="pin or passphrase from /etc/wakepc.conf">
   <button class="primary" onclick="saveTok()">unlock</button>
 </div>
 <div id="panel" style="display:none">
