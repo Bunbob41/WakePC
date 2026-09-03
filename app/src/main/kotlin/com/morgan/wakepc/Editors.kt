@@ -166,11 +166,11 @@ fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("ADDRESS")
-                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "http://100.x.y.z:8787")
+                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "100.x.y.z or pi-name")
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("FALLBACK ADDRESS · OPTIONAL")
-                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "http://pi-name:8787")
+                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "second address, tried if the first fails")
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("TOKEN")

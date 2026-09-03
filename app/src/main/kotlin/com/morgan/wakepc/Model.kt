@@ -16,7 +16,14 @@ private val STATE = stringPreferencesKey("state_v3")
 private val whitespace = Regex("\\s+")
 
 // Pastes drag invisible extras into single-line fields; keep the plausible part.
-fun cleanUrl(raw: String): String = raw.trim().takeWhile { !it.isWhitespace() }.trimEnd('/')
+// Also absorb address shorthand: "homepi", "100.64.0.2:8787" and full URLs all work —
+// a missing scheme becomes http:// and a bare host gets the default port.
+fun cleanUrl(raw: String): String {
+    val trimmed = raw.trim().takeWhile { !it.isWhitespace() }.trimEnd('/')
+    if (trimmed.isEmpty() || "://" in trimmed) return trimmed
+    val withPort = if (Regex(":\\d+$").containsMatchIn(trimmed)) trimmed else "$trimmed:8787"
+    return "http://$withPort"
+}
 fun cleanToken(raw: String): String = raw.trim().split(whitespace).lastOrNull().orEmpty()
 
 data class Connection(
