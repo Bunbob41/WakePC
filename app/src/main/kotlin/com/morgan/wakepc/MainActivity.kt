@@ -21,7 +21,7 @@ import androidx.compose.ui.Modifier
 sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
-    data class EditConnection(val id: String?) : Screen
+    data class EditConnection(val id: String?, val fromEmpty: Boolean = false) : Screen
     data class EditMachine(val id: String?) : Screen
 }
 
@@ -51,17 +51,16 @@ private fun App(store: Store) {
     val current = state ?: return
 
     BackHandler(enabled = screen != Screen.Home) {
-        screen = if (screen is Screen.EditConnection && current.connections.isNotEmpty()) {
-            Screen.Settings
-        } else {
-            Screen.Home
+        screen = when (val s = screen) {
+            is Screen.EditConnection -> if (s.fromEmpty) Screen.Home else Screen.Settings
+            else -> Screen.Home
         }
     }
 
     when (val s = screen) {
         Screen.Home ->
             if (current.connections.isEmpty()) {
-                EmptyScreen(onAddConnection = { screen = Screen.EditConnection(null) })
+                EmptyScreen(onAddConnection = { screen = Screen.EditConnection(null, fromEmpty = true) })
             } else {
                 HomeScreen(
                     state = current,
@@ -81,9 +80,9 @@ private fun App(store: Store) {
         is Screen.EditConnection -> ConnectionEditor(
             store = store,
             connectionId = s.id,
-            onDone = {
-                screen = if (current.connections.isEmpty()) Screen.Home else Screen.Settings
-            },
+            // First connection saved: carry straight on into naming the first machine.
+            onSaved = { screen = if (s.fromEmpty) Screen.EditMachine(null) else Screen.Settings },
+            onClosed = { screen = if (s.fromEmpty) Screen.Home else Screen.Settings },
         )
 
         is Screen.EditMachine -> MachineEditor(

@@ -99,7 +99,12 @@ fun EmptyScreen(onAddConnection: () -> Unit) {
 }
 
 @Composable
-fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
+fun ConnectionEditor(
+    store: Store,
+    connectionId: String?,
+    onSaved: () -> Unit,
+    onClosed: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var loaded by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -132,7 +137,7 @@ fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
         token = cleanToken(token),
     )
 
-    EditorScaffold(if (connectionId == null) "NEW CONNECTION" else "EDIT CONNECTION", onBack = onDone) {
+    EditorScaffold(if (connectionId == null) "NEW CONNECTION" else "EDIT CONNECTION", onBack = onClosed) {
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -216,7 +221,7 @@ fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
                                         tile = s.tile?.takeIf { it.machineId in ids },
                                     )
                                 }
-                                onDone()
+                                onClosed()
                             }
                         }
                         .padding(vertical = 8.dp),
@@ -242,7 +247,7 @@ fun ConnectionEditor(store: Store, connectionId: String?, onDone: () -> Unit) {
                         },
                     )
                 }
-                onDone()
+                onSaved()
             }
         }
     }
@@ -281,7 +286,11 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
         fetchError = null
         val conn = connections.firstOrNull { it.id == connectionId } ?: return@LaunchedEffect
         WakeApi.fetchCommands(conn).fold(
-            onSuccess = { available = it },
+            onSuccess = { fetched ->
+                available = fetched
+                // A brand-new machine starts with everything checked; uncheck to trim.
+                if (machineId == null && selected.isEmpty()) selected = fetched
+            },
             onFailure = { fetchError = it.message },
         )
     }
