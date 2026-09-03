@@ -118,6 +118,7 @@ fun ConnectionEditor(
     var testResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
     val newId = remember { java.util.UUID.randomUUID().toString() }
     val context = androidx.compose.ui.platform.LocalContext.current
+    var scanMsg by remember { mutableStateOf<Pair<String, Color>?>(null) }
 
     LaunchedEffect(connectionId) {
         val existing = store.current().connection(connectionId)
@@ -154,6 +155,7 @@ fun ConnectionEditor(
                     .fillMaxWidth()
                     .dashedBorder(Palette.dashed, 6.dp)
                     .clickable {
+                        scanMsg = "opening scanner…" to Palette.dim
                         val options = GmsBarcodeScannerOptions.Builder()
                             .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
                             .build()
@@ -165,20 +167,22 @@ fun ConnectionEditor(
                                     uri.getQueryParameter("host")?.let { baseUrl = it }
                                     uri.getQueryParameter("fallback")?.let { fallbackUrl = it }
                                     uri.getQueryParameter("token")?.let { token = it }
-                                    testResult = "scanned — tap test connection to verify" to Palette.dim
+                                    scanMsg = "scanned — tap test connection to verify" to Palette.green
                                 } else {
-                                    testResult = "not a wakepc setup qr" to Palette.red
+                                    scanMsg = "not a wakepc setup qr" to Palette.red
                                 }
                             }
+                            .addOnCanceledListener { scanMsg = null }
                             .addOnFailureListener {
-                                testResult = "scan failed: ${it.message}" to Palette.red
+                                scanMsg = "scanner unavailable: ${it.message ?: "unknown"} — type the details instead" to Palette.red
                             }
                     }
                     .padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                ConsoleText("scan setup qr — run 'wakepc.py qr' on the pi", size = 12, color = Palette.dim)
+                ConsoleText("scan setup qr — from the pi panel or 'wakepc.py qr'", size = 12, color = Palette.dim)
             }
+            scanMsg?.let { (text, color) -> ConsoleText(text, size = 11, color = color) }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("NAME")
                 ConsoleField(name, { name = it }, placeholder = "my pi")
