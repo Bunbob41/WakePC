@@ -31,7 +31,9 @@ jobs:
         with:
           python-version: "3.13"
       - name: Ruff
-        run: pipx run ruff check pi/
+        # Pinned so CI lints with the same ruff developers run locally, not a
+        # moving pipx "latest" whose default rule set drifts.
+        run: pipx run ruff==0.15.15 check pi/
       - name: Unit tests
         working-directory: pi
         run: python -m unittest -v
