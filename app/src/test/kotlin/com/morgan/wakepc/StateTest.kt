@@ -7,23 +7,30 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StateTest {
-
-    private val connection = Connection(
-        id = "c1", name = "my pi", color = 0xFF45D06D,
-        baseUrl = "http://homepi:8787", fallbackUrl = "http://100.64.0.2:8787",
-        token = "test-token",
-    )
-    private val machine = Machine(
-        id = "m1", name = "desk pc", connectionId = "c1",
-        commands = listOf(CommandRef("wake-pc", ping = true), CommandRef("suspend-pc", ping = false)),
-    )
-    private val state = AppState(
-        connections = listOf(connection),
-        machines = listOf(machine),
-        hero = ButtonRef("m1", "wake-pc"),
-        heroStyle = HeroStyle.MINI,
-        tile = ButtonRef("m1", "suspend-pc"),
-    )
+    private val connection =
+        Connection(
+            id = "c1",
+            name = "my pi",
+            color = 0xFF45D06D,
+            baseUrl = "http://homepi:8787",
+            fallbackUrl = "http://100.64.0.2:8787",
+            token = "test-token",
+        )
+    private val machine =
+        Machine(
+            id = "m1",
+            name = "desk pc",
+            connectionId = "c1",
+            commands = listOf(CommandRef("wake-pc", ping = true), CommandRef("suspend-pc", ping = false)),
+        )
+    private val state =
+        AppState(
+            connections = listOf(connection),
+            machines = listOf(machine),
+            hero = ButtonRef("m1", "wake-pc"),
+            heroStyle = HeroStyle.MINI,
+            tile = ButtonRef("m1", "suspend-pc"),
+        )
 
     @Test
     fun `state survives an encode-decode round trip`() {

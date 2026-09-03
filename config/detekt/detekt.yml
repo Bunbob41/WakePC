@@ -1,0 +1,45 @@
+# Overrides layered on top of detekt's defaults (buildUponDefaultConfig = true).
+# Everything here exists to stop detekt fighting Jetpack Compose conventions.
+
+naming:
+  FunctionNaming:
+    # @Composable functions are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    # UI helper files (e.g. Ui.kt) deliberately group a palette object with
+    # many top-level composables; the one-declaration-per-file rule doesn't fit.
+    active: false
+
+complexity:
+  LongMethod:
+    # Compose UI functions are declarative and naturally long; nesting depth
+    # is the signal that actually matters, not line count.
+    ignoreAnnotated: ['Composable']
+  CyclomaticComplexMethod:
+    # A Compose editor branches heavily (per-field state, when/if on selection);
+    # that branching is the layout, not hidden logic.
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    # The rule is about surface area; private helpers are not part of it.
+    ignorePrivate: true
+
+style:
+  MaxLineLength:
+    # Match ktlint's 140 (set in .editorconfig) so the two linters agree.
+    maxLineLength: 140
+  ReturnCount:
+    # Guard clauses that bail early are clearer than the nested alternative. The default
+    # cap of 2 punishes exactly the style we want for validate-then-proceed functions.
+    max: 3
+    excludeGuardClauses: true
+  UnusedPrivateMember:
+    # @Preview functions are invoked by tooling, never from code.
+    ignoreAnnotated: ['Composable', 'Preview']
+  MagicNumber:
+    # dp / sp literals in layout code are idiomatic, not magic numbers.
+    ignoreAnnotated: ['Composable', 'Preview']
+    # A named constant holding a number is the fix this rule asks for; flagging the
+    # declaration itself just pushes the literal somewhere less readable.
+    ignorePropertyDeclaration: true

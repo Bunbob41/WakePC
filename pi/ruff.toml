@@ -1,0 +1,6 @@
+# The service is deliberately stdlib-only; keep the lint light and standard.
+# Default rule set (pyflakes + pycodestyle errors) plus import sorting.
+line-length = 100
+
+[lint]
+extend-select = ["I"]  # isort-style import ordering

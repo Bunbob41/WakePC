@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AddressTest {
-
     @Test
     fun `bare host gets scheme and default port`() {
         assertEquals("http://homepi:8787", cleanUrl("homepi"))

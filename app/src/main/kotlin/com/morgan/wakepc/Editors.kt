@@ -36,17 +36,24 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.launch
 
-val connectionColors = listOf(
-    0xFFFF5D49, 0xFF45D06D, 0xFFE2A63D, 0xFF4AA3FF, 0xFFA06BFF, 0xFF3ECFC0,
-)
+val connectionColors =
+    listOf(
+        0xFFFF5D49,
+        0xFF45D06D,
+        0xFFE2A63D,
+        0xFF4AA3FF,
+        0xFFA06BFF,
+        0xFF3ECFC0,
+    )
 
 /** Bundles can't hold CommandRef, so flatten to name/ping pairs. */
-private val commandsSaver = listSaver<List<CommandRef>, Any>(
-    save = { list -> list.flatMap { listOf(it.name, it.ping) } },
-    restore = { flat ->
-        flat.chunked(2).map { CommandRef(it[0] as String, it[1] as Boolean) }
-    },
-)
+private val commandsSaver =
+    listSaver<List<CommandRef>, Any>(
+        save = { list -> list.flatMap { listOf(it.name, it.ping) } },
+        restore = { flat ->
+            flat.chunked(2).map { CommandRef(it[0] as String, it[1] as Boolean) }
+        },
+    )
 
 @Composable
 fun EditorScaffold(
@@ -60,7 +67,8 @@ fun EditorScaffold(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TintedIcon(
-                R.drawable.ic_back, Palette.dim,
+                R.drawable.ic_back,
+                Palette.dim,
                 modifier = Modifier.clickable(onClick = onBack),
             )
             Spacer(modifier = Modifier.size(14.dp))
@@ -126,7 +134,12 @@ fun ConnectionEditor(
     var fallbackUrl by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
     var testResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
-    val newId = rememberSaveable { java.util.UUID.randomUUID().toString() }
+    val newId =
+        rememberSaveable {
+            java.util.UUID
+                .randomUUID()
+                .toString()
+        }
     val context = androidx.compose.ui.platform.LocalContext.current
     var scanMsg by remember { mutableStateOf<Pair<String, Color>?>(null) }
 
@@ -145,51 +158,56 @@ fun ConnectionEditor(
     }
     if (!loaded) return
 
-    fun draft() = Connection(
-        id = connectionId ?: newId,
-        name = name.trim(),
-        color = color,
-        baseUrl = cleanUrl(baseUrl),
-        fallbackUrl = cleanUrl(fallbackUrl),
-        token = cleanToken(token),
-    )
+    fun draft() =
+        Connection(
+            id = connectionId ?: newId,
+            name = name.trim(),
+            color = color,
+            baseUrl = cleanUrl(baseUrl),
+            fallbackUrl = cleanUrl(fallbackUrl),
+            token = cleanToken(token),
+        )
 
     EditorScaffold(if (connectionId == null) "NEW CONNECTION" else "EDIT CONNECTION", onBack = onClosed) {
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .dashedBorder(Palette.dashed, 6.dp)
-                    .clickable {
-                        scanMsg = "opening scanner…" to Palette.dim
-                        val options = GmsBarcodeScannerOptions.Builder()
-                            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                            .build()
-                        GmsBarcodeScanning.getClient(context, options).startScan()
-                            .addOnSuccessListener { barcode ->
-                                val uri = barcode.rawValue?.let(android.net.Uri::parse)
-                                if (uri?.scheme == "wakepc") {
-                                    uri.getQueryParameter("name")?.let { if (name.isBlank()) name = it }
-                                    uri.getQueryParameter("host")?.let { baseUrl = it }
-                                    uri.getQueryParameter("fallback")?.let { fallbackUrl = it }
-                                    uri.getQueryParameter("token")?.let { token = it }
-                                    scanMsg = "scanned — tap test connection to verify" to Palette.green
-                                } else {
-                                    scanMsg = "not a wakepc setup qr" to Palette.red
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .dashedBorder(Palette.dashed, 6.dp)
+                        .clickable {
+                            scanMsg = "opening scanner…" to Palette.dim
+                            val options =
+                                GmsBarcodeScannerOptions
+                                    .Builder()
+                                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                                    .build()
+                            GmsBarcodeScanning
+                                .getClient(context, options)
+                                .startScan()
+                                .addOnSuccessListener { barcode ->
+                                    val uri = barcode.rawValue?.let(android.net.Uri::parse)
+                                    if (uri?.scheme == "wakepc") {
+                                        uri.getQueryParameter("name")?.let { if (name.isBlank()) name = it }
+                                        uri.getQueryParameter("host")?.let { baseUrl = it }
+                                        uri.getQueryParameter("fallback")?.let { fallbackUrl = it }
+                                        uri.getQueryParameter("token")?.let { token = it }
+                                        scanMsg = "scanned — tap test connection to verify" to Palette.green
+                                    } else {
+                                        scanMsg = "not a wakepc setup qr" to Palette.red
+                                    }
+                                }.addOnCanceledListener { scanMsg = null }
+                                .addOnFailureListener {
+                                    scanMsg = "scanner unavailable: ${it.message ?: "unknown"} — type the details instead" to Palette.red
                                 }
-                            }
-                            .addOnCanceledListener { scanMsg = null }
-                            .addOnFailureListener {
-                                scanMsg = "scanner unavailable: ${it.message ?: "unknown"} — type the details instead" to Palette.red
-                            }
-                    }
-                    .padding(vertical = 13.dp),
+                        }.padding(vertical = 13.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 ConsoleText("scan setup qr — from the pi panel or 'wakepc.py qr'", size = 12, color = Palette.dim)
@@ -204,17 +222,17 @@ fun ConnectionEditor(
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     connectionColors.forEach { c ->
                         Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .background(Color(c), RoundedCornerShape(6.dp))
-                                .then(
-                                    if (c == color) {
-                                        Modifier.border(2.dp, Palette.text, RoundedCornerShape(6.dp))
-                                    } else {
-                                        Modifier
-                                    },
-                                )
-                                .clickable { color = c },
+                            modifier =
+                                Modifier
+                                    .size(34.dp)
+                                    .background(Color(c), RoundedCornerShape(6.dp))
+                                    .then(
+                                        if (c == color) {
+                                            Modifier.border(2.dp, Palette.text, RoundedCornerShape(6.dp))
+                                        } else {
+                                            Modifier
+                                        },
+                                    ).clickable { color = c },
                         )
                     }
                 }
@@ -232,22 +250,23 @@ fun ConnectionEditor(
                 ConsoleField(token, { token = it }, secret = true)
             }
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Palette.selBg, RoundedCornerShape(6.dp))
-                    .border(1.dp, Palette.selBorder, RoundedCornerShape(6.dp))
-                    .clickable {
-                        scope.launch {
-                            testResult = "testing…" to Palette.dim
-                            testResult = WakeApi.fetchCommands(draft()).fold(
-                                onSuccess = { cmds ->
-                                    "ok — found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
-                                },
-                                onFailure = { "failed: ${it.message}" to Palette.red },
-                            )
-                        }
-                    }
-                    .padding(vertical = 14.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Palette.selBg, RoundedCornerShape(6.dp))
+                        .border(1.dp, Palette.selBorder, RoundedCornerShape(6.dp))
+                        .clickable {
+                            scope.launch {
+                                testResult = "testing…" to Palette.dim
+                                testResult =
+                                    WakeApi.fetchCommands(draft()).fold(
+                                        onSuccess = { cmds ->
+                                            "ok — found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
+                                        },
+                                        onFailure = { "failed: ${it.message}" to Palette.red },
+                                    )
+                            }
+                        }.padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 ConsoleText("test connection", size = 13, color = Palette.green, letterSpacing = 1.0)
@@ -257,24 +276,24 @@ fun ConnectionEditor(
             }
             if (connectionId != null) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            scope.launch {
-                                store.update { s ->
-                                    val machines = s.machines.filterNot { it.connectionId == connectionId }
-                                    val ids = machines.map { it.id }.toSet()
-                                    s.copy(
-                                        connections = s.connections.filterNot { it.id == connectionId },
-                                        machines = machines,
-                                        hero = s.hero?.takeIf { it.machineId in ids },
-                                        tile = s.tile?.takeIf { it.machineId in ids },
-                                    )
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch {
+                                    store.update { s ->
+                                        val machines = s.machines.filterNot { it.connectionId == connectionId }
+                                        val ids = machines.map { it.id }.toSet()
+                                        s.copy(
+                                            connections = s.connections.filterNot { it.id == connectionId },
+                                            machines = machines,
+                                            hero = s.hero?.takeIf { it.machineId in ids },
+                                            tile = s.tile?.takeIf { it.machineId in ids },
+                                        )
+                                    }
+                                    onClosed()
                                 }
-                                onClosed()
-                            }
-                        }
-                        .padding(vertical = 8.dp),
+                            }.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     ConsoleText("delete connection", size = 12, color = Palette.red)
@@ -290,11 +309,12 @@ fun ConnectionEditor(
                 store.update { s ->
                     val index = s.connections.indexOfFirst { it.id == cleaned.id }
                     s.copy(
-                        connections = if (index >= 0) {
-                            s.connections.toMutableList().apply { set(index, cleaned) }
-                        } else {
-                            s.connections + cleaned
-                        },
+                        connections =
+                            if (index >= 0) {
+                                s.connections.toMutableList().apply { set(index, cleaned) }
+                            } else {
+                                s.connections + cleaned
+                            },
                     )
                 }
                 onSaved()
@@ -304,7 +324,11 @@ fun ConnectionEditor(
 }
 
 @Composable
-fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
+fun MachineEditor(
+    store: Store,
+    machineId: String?,
+    onDone: () -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var loaded by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -353,10 +377,11 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
 
     EditorScaffold(if (machineId == null) "NEW MACHINE" else "EDIT MACHINE", onBack = onDone) {
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -369,25 +394,25 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
                     connections.forEach { conn ->
                         val isSel = conn.id == connectionId
                         Row(
-                            modifier = Modifier
-                                .background(
-                                    if (isSel) Color(conn.color).copy(alpha = 0.09f) else Palette.card,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSel) Color(conn.color) else Palette.border,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .clickable { connectionId = conn.id }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            modifier =
+                                Modifier
+                                    .background(
+                                        if (isSel) Color(conn.color).copy(alpha = 0.09f) else Palette.card,
+                                        RoundedCornerShape(6.dp),
+                                    ).border(
+                                        1.dp,
+                                        if (isSel) Color(conn.color) else Palette.border,
+                                        RoundedCornerShape(6.dp),
+                                    ).clickable { connectionId = conn.id }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(Color(conn.color), CircleShape),
+                                modifier =
+                                    Modifier
+                                        .size(8.dp)
+                                        .background(Color(conn.color), CircleShape),
                             )
                             ConsoleText(
                                 conn.name,
@@ -401,48 +426,55 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionLabel("BUTTONS · FROM ${connection?.name?.uppercase() ?: "?"}")
                 when {
-                    fetchError != null ->
+                    fetchError != null -> {
                         ConsoleText("couldn't reach: $fetchError", size = 11, color = Palette.red)
-                    available == null ->
+                    }
+
+                    available == null -> {
                         ConsoleText("fetching commands…", size = 11, color = Palette.dim)
-                    else -> available.orEmpty().forEach { cmd ->
-                        val isSel = selected.any { it.name == cmd.name }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isSel) Palette.selBg else Palette.card, RoundedCornerShape(6.dp))
-                                .border(
-                                    1.dp,
-                                    if (isSel) Palette.selBorder else Palette.border,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .clickable {
-                                    selected = if (isSel) {
-                                        selected.filterNot { it.name == cmd.name }
-                                    } else {
-                                        selected + cmd
-                                    }
+                    }
+
+                    else -> {
+                        available.orEmpty().forEach { cmd ->
+                            val isSel = selected.any { it.name == cmd.name }
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .background(if (isSel) Palette.selBg else Palette.card, RoundedCornerShape(6.dp))
+                                        .border(
+                                            1.dp,
+                                            if (isSel) Palette.selBorder else Palette.border,
+                                            RoundedCornerShape(6.dp),
+                                        ).clickable {
+                                            selected =
+                                                if (isSel) {
+                                                    selected.filterNot { it.name == cmd.name }
+                                                } else {
+                                                    selected + cmd
+                                                }
+                                        }.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (isSel) {
+                                    TintedIcon(R.drawable.ic_check, Palette.green, size = 15.dp)
+                                } else {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .size(15.dp)
+                                                .border(1.dp, Palette.faint, RoundedCornerShape(3.dp)),
+                                    )
                                 }
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (isSel) {
-                                TintedIcon(R.drawable.ic_check, Palette.green, size = 15.dp)
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(15.dp)
-                                        .border(1.dp, Palette.faint, RoundedCornerShape(3.dp)),
+                                ConsoleText(
+                                    cmd.name,
+                                    size = 13,
+                                    color = if (isSel) Palette.text else Palette.sub,
+                                    modifier = Modifier.padding(start = 12.dp).weight(1f),
                                 )
-                            }
-                            ConsoleText(
-                                cmd.name,
-                                size = 13,
-                                color = if (isSel) Palette.text else Palette.sub,
-                                modifier = Modifier.padding(start = 12.dp).weight(1f),
-                            )
-                            if (cmd.ping) {
-                                ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
+                                if (cmd.ping) {
+                                    ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
+                                }
                             }
                         }
                     }
@@ -455,21 +487,21 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
             }
             if (machineId != null) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            scope.launch {
-                                store.update { s ->
-                                    s.copy(
-                                        machines = s.machines.filterNot { it.id == machineId },
-                                        hero = s.hero?.takeIf { it.machineId != machineId },
-                                        tile = s.tile?.takeIf { it.machineId != machineId },
-                                    )
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch {
+                                    store.update { s ->
+                                        s.copy(
+                                            machines = s.machines.filterNot { it.id == machineId },
+                                            hero = s.hero?.takeIf { it.machineId != machineId },
+                                            tile = s.tile?.takeIf { it.machineId != machineId },
+                                        )
+                                    }
+                                    onDone()
                                 }
-                                onDone()
-                            }
-                        }
-                        .padding(vertical = 8.dp),
+                            }.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     ConsoleText("delete machine", size = 12, color = Palette.red)
@@ -483,19 +515,23 @@ fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
             val connId = connectionId ?: return@PrimaryButton
             scope.launch {
                 store.update { s ->
-                    val machine = (s.machine(machineId) ?: Machine()).copy(
-                        name = name.trim(),
-                        connectionId = connId,
-                        commands = selected,
-                    )
+                    val machine =
+                        (s.machine(machineId) ?: Machine()).copy(
+                            name = name.trim(),
+                            connectionId = connId,
+                            commands = selected,
+                        )
                     val index = s.machines.indexOfFirst { it.id == machine.id }
-                    val machines = if (index >= 0) {
-                        s.machines.toMutableList().apply { set(index, machine) }
-                    } else {
-                        s.machines + machine
-                    }
-                    val defaultRef = machine.commands.firstOrNull()
-                        ?.let { ButtonRef(machine.id, it.name) }
+                    val machines =
+                        if (index >= 0) {
+                            s.machines.toMutableList().apply { set(index, machine) }
+                        } else {
+                            s.machines + machine
+                        }
+                    val defaultRef =
+                        machine.commands
+                            .firstOrNull()
+                            ?.let { ButtonRef(machine.id, it.name) }
                     s.copy(
                         machines = machines,
                         hero = s.hero ?: defaultRef,

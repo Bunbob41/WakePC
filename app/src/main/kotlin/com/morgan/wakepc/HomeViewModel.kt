@@ -17,7 +17,12 @@ import kotlinx.coroutines.launch
 /** Semantic status colour — the UI maps this to the palette, the VM stays colour-free. */
 enum class Tone { NEUTRAL, ACTIVE, GOOD, BAD }
 
-data class Transient(val text: String, val tone: Tone, val pulse: Boolean, val glow: Boolean)
+data class Transient(
+    val text: String,
+    val tone: Tone,
+    val pulse: Boolean,
+    val glow: Boolean,
+)
 
 /** Per-machine live status the home screen renders over the persisted model. */
 data class MachineRuntime(
@@ -37,7 +42,6 @@ class HomeViewModel(
     private val api: WakeRepository = WakeApi,
     private val pollIntervalMs: Long = 15_000,
 ) : ViewModel() {
-
     val state: StateFlow<AppState> =
         stateFlow.stateIn(viewModelScope, SharingStarted.Eagerly, AppState())
 
@@ -49,12 +53,13 @@ class HomeViewModel(
     /** Idempotent: the screen calls this when it becomes active. */
     fun startPolling() {
         if (pollJob?.isActive == true) return
-        pollJob = viewModelScope.launch {
-            while (isActive) {
-                pollOnce()
-                delay(pollIntervalMs)
+        pollJob =
+            viewModelScope.launch {
+                while (isActive) {
+                    pollOnce()
+                    delay(pollIntervalMs)
+                }
             }
-        }
     }
 
     private suspend fun pollOnce() {
@@ -68,7 +73,11 @@ class HomeViewModel(
         }
     }
 
-    fun run(machine: Machine, connection: Connection, command: CommandRef) {
+    fun run(
+        machine: Machine,
+        connection: Connection,
+        command: CommandRef,
+    ) {
         if (_runtime.value[machine.id]?.running != null) return
         viewModelScope.launch {
             update(machine.id) { it.copy(running = command.name) }
@@ -80,7 +89,11 @@ class HomeViewModel(
         }
     }
 
-    private suspend fun runWithWake(machine: Machine, connection: Connection, command: CommandRef) {
+    private suspend fun runWithWake(
+        machine: Machine,
+        connection: Connection,
+        command: CommandRef,
+    ) {
         setTransient(machine.id, "WAKING · 0:00", Tone.ACTIVE, pulse = true, glow = true)
         if (api.run(connection, command.name).isFailure) {
             flash(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false, holdMs = 3_000)
@@ -88,8 +101,8 @@ class HomeViewModel(
         }
         repeat(WAKE_ATTEMPTS) { attempt ->
             delay(POLL_STEP_MS)
-            val secs = (attempt + 1) * (POLL_STEP_MS / 1000).toInt()
-            val clock = "${secs / 60}:${(secs % 60).toString().padStart(2, '0')}"
+            val secs = (attempt + 1) * (POLL_STEP_MS / MS_PER_SECOND).toInt()
+            val clock = "${secs / SECONDS_PER_MINUTE}:${(secs % SECONDS_PER_MINUTE).toString().padStart(2, '0')}"
             setTransient(machine.id, "WAKING · $clock", Tone.ACTIVE, pulse = true, glow = true)
             if (api.status(connection, command.name).getOrDefault(false)) {
                 update(machine.id) { it.copy(awake = true, transient = null) }
@@ -99,13 +112,21 @@ class HomeViewModel(
         flash(machine.id, "NO REPLY YET", Tone.NEUTRAL, glow = false, holdMs = 4_000)
     }
 
-    private suspend fun runFireAndForget(machine: Machine, connection: Connection, command: CommandRef) {
+    private suspend fun runFireAndForget(
+        machine: Machine,
+        connection: Connection,
+        command: CommandRef,
+    ) {
         setTransient(machine.id, "RUNNING", Tone.ACTIVE, pulse = true, glow = true)
         val ok = api.run(connection, command.name).isSuccess
         flash(machine.id, if (ok) "OK" else "FAILED", if (ok) Tone.GOOD else Tone.BAD, glow = ok, holdMs = 2_500)
     }
 
-    fun probe(machine: Machine, connection: Connection, command: CommandRef) {
+    fun probe(
+        machine: Machine,
+        connection: Connection,
+        command: CommandRef,
+    ) {
         if (_runtime.value[machine.id]?.running != null) return
         viewModelScope.launch {
             update(machine.id) { it.copy(running = command.name) }
@@ -113,10 +134,11 @@ class HomeViewModel(
             api.stats(connection, command.name, count = 5).fold(
                 onSuccess = { stats ->
                     update(machine.id) { it.copy(awake = stats.awake, avgMs = stats.avgMs ?: it.avgMs) }
-                    val text = stats.avgMs?.let { avg ->
-                        "${fmtMs(stats.minMs ?: avg)}/${fmtMs(avg)}/${fmtMs(stats.maxMs ?: avg)}MS · " +
-                            "${stats.lossPct.toInt()}% LOSS"
-                    }
+                    val text =
+                        stats.avgMs?.let { avg ->
+                            "${fmtMs(stats.minMs ?: avg)}/${fmtMs(avg)}/${fmtMs(stats.maxMs ?: avg)}MS · " +
+                                "${stats.lossPct.toInt()}% LOSS"
+                        }
                     if (text != null) {
                         setTransient(machine.id, text, if (stats.lossPct > 0) Tone.ACTIVE else Tone.GOOD, glow = true)
                     } else {
@@ -125,28 +147,46 @@ class HomeViewModel(
                 },
                 onFailure = { setTransient(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false) },
             )
-            delay(6_000)
+            delay(PROBE_RESULT_HOLD_MS)
             update(machine.id) { it.copy(transient = null, running = null) }
         }
     }
 
-    private fun setTransient(id: String, text: String, tone: Tone, pulse: Boolean = false, glow: Boolean) {
+    private fun setTransient(
+        id: String,
+        text: String,
+        tone: Tone,
+        pulse: Boolean = false,
+        glow: Boolean,
+    ) {
         update(id) { it.copy(transient = Transient(text, tone, pulse, glow)) }
     }
 
-    private suspend fun flash(id: String, text: String, tone: Tone, glow: Boolean, holdMs: Long) {
+    private suspend fun flash(
+        id: String,
+        text: String,
+        tone: Tone,
+        glow: Boolean,
+        holdMs: Long,
+    ) {
         setTransient(id, text, tone, glow = glow)
         delay(holdMs)
         update(id) { it.copy(transient = null) }
     }
 
-    private fun update(id: String, transform: (MachineRuntime) -> MachineRuntime) {
+    private fun update(
+        id: String,
+        transform: (MachineRuntime) -> MachineRuntime,
+    ) {
         _runtime.update { it + (id to transform(it[id] ?: MachineRuntime())) }
     }
 
     private companion object {
         const val WAKE_ATTEMPTS = 30
         const val POLL_STEP_MS = 3_000L
+        const val PROBE_RESULT_HOLD_MS = 6_000L
+        const val MS_PER_SECOND = 1_000L
+        const val SECONDS_PER_MINUTE = 60
     }
 }
 

@@ -23,10 +23,11 @@ fun ConsoleScreen(onBack: () -> Unit) {
 
     EditorScaffold("CONSOLE", onBack = onBack) {
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(scroll)
-                .padding(horizontal = 20.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(scroll)
+                    .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             if (lines.isEmpty()) {
@@ -38,11 +39,12 @@ fun ConsoleScreen(onBack: () -> Unit) {
                     ConsoleText(
                         line.text,
                         size = 11,
-                        color = when (line.ok) {
-                            true -> Palette.sub
-                            false -> Palette.red
-                            null -> Palette.dim
-                        },
+                        color =
+                            when (line.ok) {
+                                true -> Palette.sub
+                                false -> Palette.red
+                                null -> Palette.dim
+                            },
                         modifier = Modifier.padding(start = 12.dp),
                     )
                 }

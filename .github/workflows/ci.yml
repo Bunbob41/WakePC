@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install compile SDK
+        run: yes | sdkmanager "platforms;android-37" > /dev/null
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Spotless, detekt, unit tests
+        run: ./gradlew spotlessCheck detekt testDebugUnitTest --no-daemon --stacktrace
+
+  pi-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Ruff
+        run: pipx run ruff check pi/
+      - name: Unit tests
+        working-directory: pi
+        run: python -m unittest -v

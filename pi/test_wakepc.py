@@ -3,7 +3,6 @@
 
 import importlib.util
 import pathlib
-import sys
 import tempfile
 import unittest
 

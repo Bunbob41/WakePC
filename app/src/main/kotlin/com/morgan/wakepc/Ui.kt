@@ -68,38 +68,52 @@ object Palette {
 
 val Mono = FontFamily.Monospace
 
+private const val DASH_LENGTH = 8f
+
 @Composable
 fun pulseAlpha(): Float {
     val transition = rememberInfiniteTransition(label = "pulse")
     val alpha by transition.animateFloat(
         initialValue = 1f,
         targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(800, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "pulseAlpha",
     )
     return alpha
 }
 
 @Composable
-fun Led(color: Color, modifier: Modifier = Modifier, size: Dp = 8.dp, pulse: Boolean = false) {
+fun Led(
+    color: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 8.dp,
+    pulse: Boolean = false,
+) {
     val alpha = if (pulse) pulseAlpha() else 1f
     Box(modifier = modifier.size(size * 3).alpha(alpha), contentAlignment = Alignment.Center) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(listOf(color.copy(alpha = 0.4f), Color.Transparent)),
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(listOf(color.copy(alpha = 0.4f), Color.Transparent)),
+                    ),
         )
         Box(modifier = Modifier.size(size).background(color, CircleShape))
     }
 }
 
 @Composable
-fun StatusText(text: String, color: Color, pulse: Boolean = false, glow: Boolean = false) {
+fun StatusText(
+    text: String,
+    color: Color,
+    pulse: Boolean = false,
+    glow: Boolean = false,
+) {
     val alpha = if (pulse) pulseAlpha() else 1f
     androidx.compose.material3.Text(
         text = text,
@@ -107,11 +121,12 @@ fun StatusText(text: String, color: Color, pulse: Boolean = false, glow: Boolean
         fontSize = 10.sp,
         fontFamily = Mono,
         letterSpacing = 1.5.sp,
-        style = if (glow) {
-            TextStyle(shadow = Shadow(color = color.copy(alpha = 0.75f), blurRadius = 14f))
-        } else {
-            TextStyle.Default
-        },
+        style =
+            if (glow) {
+                TextStyle(shadow = Shadow(color = color.copy(alpha = 0.75f), blurRadius = 14f))
+            } else {
+                TextStyle.Default
+            },
         modifier = Modifier.alpha(alpha),
     )
 }
@@ -157,21 +172,23 @@ fun ConsoleField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(
-            color = Palette.text,
-            fontSize = 14.sp,
-            fontFamily = Mono,
-            letterSpacing = if (hidden) 3.sp else 0.sp,
-        ),
+        textStyle =
+            TextStyle(
+                color = Palette.text,
+                fontSize = 14.sp,
+                fontFamily = Mono,
+                letterSpacing = if (hidden) 3.sp else 0.sp,
+            ),
         cursorBrush = SolidColor(Palette.text),
         visualTransformation = if (hidden) PasswordVisualTransformation('•') else VisualTransformation.None,
         decorationBox = { inner ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Palette.card, RoundedCornerShape(6.dp))
-                    .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Palette.card, RoundedCornerShape(6.dp))
+                        .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.weight(1f)) {
@@ -186,9 +203,10 @@ fun ConsoleField(
                         size = 10,
                         color = Palette.dim,
                         letterSpacing = 1.5,
-                        modifier = Modifier
-                            .clickable { reveal = !reveal }
-                            .padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
+                        modifier =
+                            Modifier
+                                .clickable { reveal = !reveal }
+                                .padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
                     )
                 }
             }
@@ -197,13 +215,18 @@ fun ConsoleField(
 }
 
 @Composable
-fun PrimaryButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun PrimaryButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Palette.text, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 17.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(Palette.text, RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick)
+                .padding(vertical = 17.dp),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.material3.Text(
@@ -218,19 +241,29 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, onClick: () -> Un
     }
 }
 
-fun Modifier.dashedBorder(color: Color, corner: Dp): Modifier = drawBehind {
-    drawRoundRect(
-        color = color,
-        style = Stroke(
-            width = 1.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
-        ),
-        cornerRadius = CornerRadius(corner.toPx()),
-    )
-}
+fun Modifier.dashedBorder(
+    color: Color,
+    corner: Dp,
+): Modifier =
+    drawBehind {
+        drawRoundRect(
+            color = color,
+            style =
+                Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(DASH_LENGTH, DASH_LENGTH)),
+                ),
+            cornerRadius = CornerRadius(corner.toPx()),
+        )
+    }
 
 @Composable
-fun TintedIcon(resId: Int, tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
+fun TintedIcon(
+    resId: Int,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 18.dp,
+) {
     Image(
         painter = painterResource(resId),
         contentDescription = null,

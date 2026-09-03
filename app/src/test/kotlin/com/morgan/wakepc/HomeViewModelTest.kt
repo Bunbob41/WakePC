@@ -18,7 +18,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
-
     private val dispatcher = StandardTestDispatcher()
 
     private val connection = Connection(id = "c1", name = "my pi", baseUrl = "http://pi:8787", token = "test-token")
@@ -31,78 +30,83 @@ class HomeViewModelTest {
 
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel(fake: FakeWakeRepository) =
-        HomeViewModel(MutableStateFlow(appState), fake, pollIntervalMs = 1_000)
+    private fun viewModel(fake: FakeWakeRepository) = HomeViewModel(MutableStateFlow(appState), fake, pollIntervalMs = 1_000)
 
     @Test
-    fun `a ping command that comes up marks the machine awake`() = runTest(dispatcher) {
-        val fake = FakeWakeRepository()
-        val vm = viewModel(fake)
+    fun `a ping command that comes up marks the machine awake`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository()
+            val vm = viewModel(fake)
 
-        vm.run(machine, connection, wake)
-        advanceUntilIdle()
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
 
-        assertTrue(fake.runCalls.contains("wake-pc"))
-        assertEquals(true, vm.runtime.value["m1"]?.awake)
-        assertNull("running should clear when done", vm.runtime.value["m1"]?.running)
-    }
-
-    @Test
-    fun `a wake that never answers leaves the machine not awake`() = runTest(dispatcher) {
-        val fake = FakeWakeRepository().apply { statsResult = Result.success(asleep()) }
-        val vm = viewModel(fake)
-
-        vm.run(machine, connection, wake)
-        advanceUntilIdle()
-
-        assertTrue(fake.runCalls.contains("wake-pc"))
-        assertEquals(false, vm.runtime.value["m1"]?.awake == true)
-        assertNull(vm.runtime.value["m1"]?.running)
-    }
-
-    @Test
-    fun `an unreachable pi surfaces and clears`() = runTest(dispatcher) {
-        val fake = FakeWakeRepository().apply { runResult = Result.failure(RuntimeException("boom")) }
-        val vm = viewModel(fake)
-
-        vm.run(machine, connection, wake)
-        advanceUntilIdle()
-
-        assertNull(vm.runtime.value["m1"]?.running)
-        assertEquals(false, vm.runtime.value["m1"]?.awake == true)
-    }
-
-    @Test
-    fun `probe records average rtt and clears running`() = runTest(dispatcher) {
-        val fake = FakeWakeRepository().apply {
-            statsResult = Result.success(PingStats(awake = true, lossPct = 0.0, minMs = 1.0, avgMs = 4.5, maxMs = 6.0))
+            assertTrue(fake.runCalls.contains("wake-pc"))
+            assertEquals(true, vm.runtime.value["m1"]?.awake)
+            assertNull("running should clear when done", vm.runtime.value["m1"]?.running)
         }
-        val vm = viewModel(fake)
-
-        vm.probe(machine, connection, wake)
-        advanceUntilIdle()
-
-        assertEquals(true, vm.runtime.value["m1"]?.awake)
-        assertEquals(4.5, vm.runtime.value["m1"]?.avgMs)
-        assertNull(vm.runtime.value["m1"]?.running)
-    }
 
     @Test
-    fun `a second tap while one is in flight is ignored`() = runTest(dispatcher) {
-        val fake = FakeWakeRepository().apply { runGate = CompletableDeferred() }
-        val vm = viewModel(fake)
+    fun `a wake that never answers leaves the machine not awake`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { statsResult = Result.success(asleep()) }
+            val vm = viewModel(fake)
 
-        vm.run(machine, connection, wake)
-        advanceUntilIdle() // suspends inside run() awaiting the gate
-        assertEquals("wake-pc", vm.runtime.value["m1"]?.running)
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
 
-        vm.run(machine, connection, wake) // must no-op
-        advanceUntilIdle()
-        assertEquals("one run only", 1, fake.runCalls.size)
+            assertTrue(fake.runCalls.contains("wake-pc"))
+            assertEquals(false, vm.runtime.value["m1"]?.awake == true)
+            assertNull(vm.runtime.value["m1"]?.running)
+        }
 
-        fake.runGate!!.complete(Unit)
-        advanceUntilIdle()
-    }
+    @Test
+    fun `an unreachable pi surfaces and clears`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { runResult = Result.failure(RuntimeException("boom")) }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertNull(vm.runtime.value["m1"]?.running)
+            assertEquals(false, vm.runtime.value["m1"]?.awake == true)
+        }
+
+    @Test
+    fun `probe records average rtt and clears running`() =
+        runTest(dispatcher) {
+            val fake =
+                FakeWakeRepository().apply {
+                    statsResult = Result.success(PingStats(awake = true, lossPct = 0.0, minMs = 1.0, avgMs = 4.5, maxMs = 6.0))
+                }
+            val vm = viewModel(fake)
+
+            vm.probe(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.runtime.value["m1"]?.awake)
+            assertEquals(4.5, vm.runtime.value["m1"]?.avgMs)
+            assertNull(vm.runtime.value["m1"]?.running)
+        }
+
+    @Test
+    fun `a second tap while one is in flight is ignored`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { runGate = CompletableDeferred() }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle() // suspends inside run() awaiting the gate
+            assertEquals("wake-pc", vm.runtime.value["m1"]?.running)
+
+            vm.run(machine, connection, wake) // must no-op
+            advanceUntilIdle()
+            assertEquals("one run only", 1, fake.runCalls.size)
+
+            fake.runGate!!.complete(Unit)
+            advanceUntilIdle()
+        }
 
     private fun asleep() = PingStats(awake = false, lossPct = 100.0, minMs = null, avgMs = null, maxMs = null)
 }
@@ -113,18 +117,25 @@ private class FakeWakeRepository : WakeRepository {
     var statsResult: Result<PingStats> = Result.success(PingStats(true, 0.0, 1.0, 2.0, 3.0))
     var runGate: CompletableDeferred<Unit>? = null
 
-    override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> =
-        Result.success(emptyList())
+    override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> = Result.success(emptyList())
 
-    override suspend fun run(connection: Connection, command: String): Result<Unit> {
+    override suspend fun run(
+        connection: Connection,
+        command: String,
+    ): Result<Unit> {
         runCalls += command
         runGate?.await()
         return runResult
     }
 
-    override suspend fun status(connection: Connection, command: String): Result<Boolean> =
-        statsResult.map { it.awake }
+    override suspend fun status(
+        connection: Connection,
+        command: String,
+    ): Result<Boolean> = statsResult.map { it.awake }
 
-    override suspend fun stats(connection: Connection, command: String, count: Int): Result<PingStats> =
-        statsResult
+    override suspend fun stats(
+        connection: Connection,
+        command: String,
+        count: Int,
+    ): Result<PingStats> = statsResult
 }

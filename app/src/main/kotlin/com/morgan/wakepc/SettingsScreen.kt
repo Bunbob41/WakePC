@@ -45,10 +45,11 @@ fun SettingsScreen(
 
     EditorScaffold("SETTINGS", onBack = onBack) {
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(26.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -58,21 +59,19 @@ fun SettingsScreen(
                     HeroStyle.entries.forEach { style ->
                         val isSel = state.heroStyle == style
                         Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(
-                                    if (isSel) Palette.red.copy(alpha = 0.09f) else Palette.card,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSel) Palette.red else Palette.border,
-                                    RoundedCornerShape(6.dp),
-                                )
-                                .clickable {
-                                    scope.launch { store.update { it.copy(heroStyle = style) } }
-                                }
-                                .padding(vertical = 14.dp),
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .background(
+                                        if (isSel) Palette.red.copy(alpha = 0.09f) else Palette.card,
+                                        RoundedCornerShape(6.dp),
+                                    ).border(
+                                        1.dp,
+                                        if (isSel) Palette.red else Palette.border,
+                                        RoundedCornerShape(6.dp),
+                                    ).clickable {
+                                        scope.launch { store.update { it.copy(heroStyle = style) } }
+                                    }.padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             ConsoleText(
@@ -95,12 +94,13 @@ fun SettingsScreen(
                 SectionLabel("CONNECTIONS")
                 state.connections.forEach { conn ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Palette.card, RoundedCornerShape(6.dp))
-                            .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                            .clickable { onEditConnection(conn.id) }
-                            .padding(14.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(Palette.card, RoundedCornerShape(6.dp))
+                                .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                                .clickable { onEditConnection(conn.id) }
+                                .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(11.dp),
                     ) {
@@ -110,11 +110,12 @@ fun SettingsScreen(
                     }
                 }
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .dashedBorder(Palette.dashed, 6.dp)
-                        .clickable { onEditConnection(null) }
-                        .padding(vertical = 13.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .dashedBorder(Palette.dashed, 6.dp)
+                            .clickable { onEditConnection(null) }
+                            .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     ConsoleText("+ add connection", size = 12, color = Palette.dim)
@@ -134,34 +135,36 @@ fun SettingsScreen(
     }
 
     if (picking != null) {
-        val options = state.machines.flatMap { machine ->
-            machine.commands.map { cmd -> ButtonRef(machine.id, cmd.name) }
-        }
+        val options =
+            state.machines.flatMap { machine ->
+                machine.commands.map { cmd -> ButtonRef(machine.id, cmd.name) }
+            }
         Dialog(onDismissRequest = { picking = null }) {
             Column(
-                modifier = Modifier
-                    .background(Palette.card, RoundedCornerShape(10.dp))
-                    .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
-                    .padding(20.dp),
+                modifier =
+                    Modifier
+                        .background(Palette.card, RoundedCornerShape(10.dp))
+                        .border(1.dp, Palette.border, RoundedCornerShape(10.dp))
+                        .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SectionLabel(if (picking == "hero") "HERO BUTTON" else "TILE FIRES")
                 options.forEach { ref ->
                     val label = describe(ref)
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-                            .clickable {
-                                val target = picking
-                                picking = null
-                                scope.launch {
-                                    store.update {
-                                        if (target == "hero") it.copy(hero = ref) else it.copy(tile = ref)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                                .clickable {
+                                    val target = picking
+                                    picking = null
+                                    scope.launch {
+                                        store.update {
+                                            if (target == "hero") it.copy(hero = ref) else it.copy(tile = ref)
+                                        }
                                     }
-                                }
-                            }
-                            .padding(13.dp),
+                                }.padding(13.dp),
                     ) {
                         ConsoleText(label, size = 13)
                     }
@@ -175,14 +178,19 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsRow(value: String, hint: String?, onClick: () -> Unit) {
+private fun SettingsRow(
+    value: String,
+    hint: String?,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Palette.card, RoundedCornerShape(6.dp))
-            .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(Palette.card, RoundedCornerShape(6.dp))
+                .border(1.dp, Palette.border, RoundedCornerShape(6.dp))
+                .clickable(onClick = onClick)
+                .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

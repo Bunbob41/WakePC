@@ -16,6 +16,8 @@ orgJson = "20260814"
 # Pinned so the app runtime and coroutines-test agree on one version rather
 # than inheriting whatever the Compose BOM happens to resolve.
 coroutines = "1.10.2"
+detekt = "1.23.8"
+spotless = "8.9.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -44,3 +46,5 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 android-application = { id = "com.android.application", version.ref = "agp" }
 # No kotlin-android plugin: AGP 9+ rejects it, Kotlin support is built in.
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

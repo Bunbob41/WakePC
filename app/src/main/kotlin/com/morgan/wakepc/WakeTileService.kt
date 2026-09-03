@@ -13,7 +13,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class WakeTileService : TileService() {
-
     // The QS panel can unbind this service at any time; the scope dies with it,
     // which at worst cuts the status polling short — the command already ran.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -66,8 +65,9 @@ class WakeTileService : TileService() {
     }
 
     private fun openApp() {
-        val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent =
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startActivityAndCollapse(
                 PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE),
@@ -78,7 +78,10 @@ class WakeTileService : TileService() {
         }
     }
 
-    private fun updateTile(subtitle: String?, state: Int) {
+    private fun updateTile(
+        subtitle: String?,
+        state: Int,
+    ) {
         qsTile?.apply {
             this.subtitle = subtitle
             this.state = state
