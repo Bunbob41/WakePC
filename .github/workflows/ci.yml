@@ -17,7 +17,10 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - name: Install compile SDK
-        run: yes | sdkmanager "platforms;android-37" > /dev/null
+        # `yes` takes a broken pipe when sdkmanager stops reading; under the
+        # runner's pipefail that would fail the step, so tolerate it — the
+        # Gradle build below is the real gate on the SDK being present.
+        run: yes | sdkmanager "platforms;android-37" > /dev/null || true
       - name: Make gradlew executable
         run: chmod +x gradlew
       - name: Spotless, detekt, unit tests
