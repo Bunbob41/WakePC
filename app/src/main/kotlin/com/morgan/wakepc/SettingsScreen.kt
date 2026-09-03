@@ -126,7 +126,7 @@ fun SettingsScreen(
             contentAlignment = Alignment.Center,
         ) {
             ConsoleText(
-                "wakepc ${BuildConfigVersion.NAME} · talks only to your tailnet",
+                "wakepc ${BuildConfig.VERSION_NAME} · talks only to your tailnet",
                 size = 10,
                 color = Palette.faint,
             )
@@ -193,8 +193,4 @@ private fun SettingsRow(value: String, hint: String?, onClick: () -> Unit) {
         }
         TintedIcon(R.drawable.ic_chevron, Palette.faint, size = 14.dp)
     }
-}
-
-object BuildConfigVersion {
-    const val NAME = "0.5.1"
 }

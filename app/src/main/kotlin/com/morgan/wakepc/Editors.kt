@@ -22,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +38,14 @@ import kotlinx.coroutines.launch
 
 val connectionColors = listOf(
     0xFFFF5D49, 0xFF45D06D, 0xFFE2A63D, 0xFF4AA3FF, 0xFFA06BFF, 0xFF3ECFC0,
+)
+
+/** Bundles can't hold CommandRef, so flatten to name/ping pairs. */
+private val commandsSaver = listSaver<List<CommandRef>, Any>(
+    save = { list -> list.flatMap { listOf(it.name, it.ping) } },
+    restore = { flat ->
+        flat.chunked(2).map { CommandRef(it[0] as String, it[1] as Boolean) }
+    },
 )
 
 @Composable
@@ -109,18 +119,20 @@ fun ConnectionEditor(
     onClosed: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var loaded by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf(connectionColors.first()) }
-    var baseUrl by remember { mutableStateOf("") }
-    var fallbackUrl by remember { mutableStateOf("") }
-    var token by remember { mutableStateOf("") }
+    var loaded by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var color by rememberSaveable { mutableStateOf(connectionColors.first()) }
+    var baseUrl by rememberSaveable { mutableStateOf("") }
+    var fallbackUrl by rememberSaveable { mutableStateOf("") }
+    var token by rememberSaveable { mutableStateOf("") }
     var testResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
-    val newId = remember { java.util.UUID.randomUUID().toString() }
+    val newId = rememberSaveable { java.util.UUID.randomUUID().toString() }
     val context = androidx.compose.ui.platform.LocalContext.current
     var scanMsg by remember { mutableStateOf<Pair<String, Color>?>(null) }
 
     LaunchedEffect(connectionId) {
+        // Already populated (rotation, process death): keep what's on screen.
+        if (loaded) return@LaunchedEffect
         val existing = store.current().connection(connectionId)
         if (existing != null) {
             name = existing.name
@@ -294,26 +306,32 @@ fun ConnectionEditor(
 @Composable
 fun MachineEditor(store: Store, machineId: String?, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var loaded by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var connectionId by remember { mutableStateOf<String?>(null) }
-    var selected by remember { mutableStateOf<List<CommandRef>>(emptyList()) }
+    var loaded by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var connectionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selected by rememberSaveable(stateSaver = commandsSaver) {
+        mutableStateOf<List<CommandRef>>(emptyList())
+    }
     var available by remember { mutableStateOf<List<CommandRef>?>(null) }
     var fetchError by remember { mutableStateOf<String?>(null) }
     var connections by remember { mutableStateOf<List<Connection>>(emptyList()) }
 
     LaunchedEffect(machineId) {
         val state = store.current()
+        // connections isn't saveable, so it reloads every time; the edited
+        // fields only load once, or rotation would discard what's on screen.
         connections = state.connections
-        val existing = state.machine(machineId)
-        if (existing != null) {
-            name = existing.name
-            connectionId = existing.connectionId
-            selected = existing.commands
-        } else {
-            connectionId = state.connections.firstOrNull()?.id
+        if (!loaded) {
+            val existing = state.machine(machineId)
+            if (existing != null) {
+                name = existing.name
+                connectionId = existing.connectionId
+                selected = existing.commands
+            } else {
+                connectionId = state.connections.firstOrNull()?.id
+            }
+            loaded = true
         }
-        loaded = true
     }
     if (!loaded) return
 

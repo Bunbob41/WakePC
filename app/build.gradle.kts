@@ -12,8 +12,8 @@ android {
         minSdk = 31
         // 36 is what the S26 Ultra actually runs, matching the chat app's choice.
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.5.1"
+        versionCode = 10
+        versionName = "0.5.2"
     }
 
     buildTypes {
@@ -36,6 +36,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Off by default since AGP 8 — the settings screen reads VERSION_NAME
+        // from here so the version lives in exactly one place.
+        buildConfig = true
     }
 }
 
@@ -54,4 +57,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.gms.code.scanner)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

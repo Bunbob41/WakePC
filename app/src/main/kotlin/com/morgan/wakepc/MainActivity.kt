@@ -14,7 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
@@ -25,6 +26,29 @@ sealed interface Screen {
     data class EditConnection(val id: String?, val fromEmpty: Boolean = false) : Screen
     data class EditMachine(val id: String?) : Screen
 }
+
+/** Survives rotation and process death; every screen is three plain values. */
+private val screenSaver = listSaver<Screen, Any?>(
+    save = { screen ->
+        when (screen) {
+            Screen.Home -> listOf("home", null, false)
+            Screen.Settings -> listOf("settings", null, false)
+            Screen.Console -> listOf("console", null, false)
+            is Screen.EditConnection -> listOf("connection", screen.id, screen.fromEmpty)
+            is Screen.EditMachine -> listOf("machine", screen.id, false)
+        }
+    },
+    restore = { saved ->
+        val id = saved[1] as String?
+        when (saved[0]) {
+            "settings" -> Screen.Settings
+            "console" -> Screen.Console
+            "connection" -> Screen.EditConnection(id, saved[2] as Boolean)
+            "machine" -> Screen.EditMachine(id)
+            else -> Screen.Home
+        }
+    },
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,7 +72,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(store: Store) {
     val state by store.state.collectAsState(initial = null)
-    var screen by remember { mutableStateOf<Screen>(Screen.Home) }
+    var screen by rememberSaveable(stateSaver = screenSaver) {
+        mutableStateOf<Screen>(Screen.Home)
+    }
     val current = state ?: return
 
     BackHandler(enabled = screen != Screen.Home) {

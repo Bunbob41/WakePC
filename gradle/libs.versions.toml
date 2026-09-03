@@ -10,6 +10,9 @@ lifecycle = "2.11.0"
 okhttp = "5.4.0"
 datastore = "1.2.1"
 codeScanner = "16.1.0"
+junit = "4.13.2"
+# Android's bundled org.json is a stub in unit tests; this is the real thing.
+orgJson = "20260814"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -26,6 +29,9 @@ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 # Google's hosted QR scan flow — no camera permission or scan UI of our own.
 gms-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "codeScanner" }
+
+junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

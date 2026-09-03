@@ -71,71 +71,73 @@ data class ResolvedButton(val machine: Machine, val connection: Connection, val 
 class Store(private val context: Context) {
 
     val state: Flow<AppState> = context.dataStore.data.map { prefs ->
-        prefs[STATE]?.let(::decode) ?: AppState()
+        prefs[STATE]?.let(::decodeState) ?: AppState()
     }
 
     suspend fun current(): AppState = state.first()
 
     suspend fun update(transform: (AppState) -> AppState) {
         context.dataStore.edit { prefs ->
-            val old = prefs[STATE]?.let(::decode) ?: AppState()
-            prefs[STATE] = encode(transform(old))
+            val old = prefs[STATE]?.let(::decodeState) ?: AppState()
+            prefs[STATE] = encodeState(transform(old))
         }
     }
+}
 
-    private fun encode(state: AppState): String {
-        val root = JSONObject()
-        root.put(
-            "connections",
-            JSONArray().also { arr ->
-                state.connections.forEach { c ->
-                    arr.put(
-                        JSONObject()
-                            .put("id", c.id).put("name", c.name).put("color", c.color)
-                            .put("baseUrl", c.baseUrl).put("fallbackUrl", c.fallbackUrl)
-                            .put("token", c.token),
-                    )
-                }
-            },
-        )
-        root.put(
-            "machines",
-            JSONArray().also { arr ->
-                state.machines.forEach { m ->
-                    arr.put(
-                        JSONObject()
-                            .put("id", m.id).put("name", m.name).put("connectionId", m.connectionId)
-                            .put(
-                                "commands",
-                                JSONArray().also { cs ->
-                                    m.commands.forEach { c ->
-                                        cs.put(JSONObject().put("name", c.name).put("ping", c.ping))
-                                    }
-                                },
-                            ),
-                    )
-                }
-            },
-        )
-        state.hero?.let { root.put("hero", refJson(it)) }
-        state.tile?.let { root.put("tile", refJson(it)) }
-        root.put("heroStyle", state.heroStyle.name)
-        return root.toString()
-    }
+// Encode/decode live outside Store so they're testable on the JVM: org.json is
+// stubbed in unit tests, but no DataStore or Context is involved.
+internal fun encodeState(state: AppState): String {
+    val root = JSONObject()
+    root.put(
+        "connections",
+        JSONArray().also { arr ->
+            state.connections.forEach { c ->
+                arr.put(
+                    JSONObject()
+                        .put("id", c.id).put("name", c.name).put("color", c.color)
+                        .put("baseUrl", c.baseUrl).put("fallbackUrl", c.fallbackUrl)
+                        .put("token", c.token),
+                )
+            }
+        },
+    )
+    root.put(
+        "machines",
+        JSONArray().also { arr ->
+            state.machines.forEach { m ->
+                arr.put(
+                    JSONObject()
+                        .put("id", m.id).put("name", m.name).put("connectionId", m.connectionId)
+                        .put(
+                            "commands",
+                            JSONArray().also { cs ->
+                                m.commands.forEach { c ->
+                                    cs.put(JSONObject().put("name", c.name).put("ping", c.ping))
+                                }
+                            },
+                        ),
+                )
+            }
+        },
+    )
+    state.hero?.let { root.put("hero", refJson(it)) }
+    state.tile?.let { root.put("tile", refJson(it)) }
+    root.put("heroStyle", state.heroStyle.name)
+    return root.toString()
+}
 
-    private fun refJson(ref: ButtonRef) =
-        JSONObject().put("machineId", ref.machineId).put("command", ref.command)
-
-    private fun decode(json: String): AppState = runCatching {
-        val root = JSONObject(json)
-        val connections = root.optJSONArray("connections").toObjectList { o ->
+/** Anything unparsable falls back to empty state rather than crashing on launch. */
+internal fun decodeState(json: String): AppState = runCatching {
+    val root = JSONObject(json)
+    AppState(
+        connections = root.optJSONArray("connections").toObjectList { o ->
             Connection(
                 id = o.getString("id"), name = o.optString("name"),
                 color = o.optLong("color", 0xFFFF5D49), baseUrl = o.optString("baseUrl"),
                 fallbackUrl = o.optString("fallbackUrl"), token = o.optString("token"),
             )
-        }
-        val machines = root.optJSONArray("machines").toObjectList { o ->
+        },
+        machines = root.optJSONArray("machines").toObjectList { o ->
             Machine(
                 id = o.getString("id"), name = o.optString("name"),
                 connectionId = o.optString("connectionId"),
@@ -143,19 +145,18 @@ class Store(private val context: Context) {
                     CommandRef(c.getString("name"), c.optBoolean("ping"))
                 },
             )
-        }
-        AppState(
-            connections = connections,
-            machines = machines,
-            hero = root.optJSONObject("hero")?.toRef(),
-            heroStyle = runCatching { HeroStyle.valueOf(root.optString("heroStyle")) }
-                .getOrDefault(HeroStyle.BANNER),
-            tile = root.optJSONObject("tile")?.toRef(),
-        )
-    }.getOrDefault(AppState())
+        },
+        hero = root.optJSONObject("hero")?.toRef(),
+        heroStyle = runCatching { HeroStyle.valueOf(root.optString("heroStyle")) }
+            .getOrDefault(HeroStyle.BANNER),
+        tile = root.optJSONObject("tile")?.toRef(),
+    )
+}.getOrDefault(AppState())
 
-    private fun JSONObject.toRef() = ButtonRef(optString("machineId"), optString("command"))
+private fun refJson(ref: ButtonRef) =
+    JSONObject().put("machineId", ref.machineId).put("command", ref.command)
 
-    private fun <T> JSONArray?.toObjectList(map: (JSONObject) -> T): List<T> =
-        if (this == null) emptyList() else (0 until length()).map { map(getJSONObject(it)) }
-}
+private fun JSONObject.toRef() = ButtonRef(optString("machineId"), optString("command"))
+
+private fun <T> JSONArray?.toObjectList(map: (JSONObject) -> T): List<T> =
+    if (this == null) emptyList() else (0 until length()).map { map(getJSONObject(it)) }
