@@ -6,3 +6,5 @@ local.properties
 .idea/
 captures/
 .cxx/
+__pycache__/
+*.pyc
