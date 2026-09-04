@@ -31,7 +31,10 @@ name* — it can never send shell across the wire.
 ## Phone setup
 
 1. Install Tailscale from the Play Store and sign in to your tailnet.
-2. Install the app (see Development below, or sideload a release APK).
+2. Install the app: grab the APK from the
+   [latest release](https://github.com/Bunbob41/WakePC/releases/latest) on your
+   phone and open it (Android will ask you to allow installs from your browser
+   the first time). Or build it yourself — see Development below.
 3. Open WakePC and add a connection: name it, enter the Pi's address
    (`100.x.y.z` or a MagicDNS name — scheme and port are filled in), and the
    token. "Scan setup qr" against the Pi panel does this without typing.
