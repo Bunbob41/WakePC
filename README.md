@@ -16,7 +16,8 @@ Two halves:
   [pi/README.md](pi/README.md).
 - **The Android app** (`app/`) — Jetpack Compose. The home screen shows a card
   per machine with live status over a configurable hero button; a Quick
-  Settings tile fires your chosen command. You set up one authenticated
+  Settings tile fires your chosen command, and a home-screen widget lists your
+  machines with tap-to-run. You set up one authenticated
   **connection** per Pi, then define **machines** whose buttons are chosen from
   the commands that connection actually offers.
 
@@ -38,8 +39,9 @@ name* — it can never send shell across the wire.
 3. Open WakePC and add a connection: name it, enter the Pi's address
    (`100.x.y.z` or a MagicDNS name — scheme and port are filled in), and the
    token. "Scan setup qr" against the Pi panel does this without typing.
-4. Add a machine, pick its commands, and drag the **Wake PC** tile into Quick
-   Settings.
+4. Add a machine and pick its commands. Then either drag the **Wake PC** tile
+   into Quick Settings, or long-press your home screen -> Widgets -> WakePC for
+   a widget with a row per machine.
 
 ## Development
 
