@@ -1,0 +1,23 @@
+# Windows side of WakePC. The Pi wakes this machine; this service does the
+# things only the machine itself can do.
+[wakepc]
+token = REPLACE_ME
+# The PC's own Tailscale IP, so nothing off the tailnet can reach it.
+bind_host = 100.x.y.z
+port = 8787
+
+# /t 5 matters: shutdown returns immediately and the HTTP response gets out
+# before the machine goes away.
+[command:shutdown-pc]
+run = shell shutdown /s /t 5
+
+[command:restart-pc]
+run = shell shutdown /r /t 5
+
+# Sleep and lock need an interactive session, so they only work while someone
+# is logged in.
+[command:sleep-pc]
+run = shell rundll32.exe powrprof.dll,SetSuspendState 0,1,0
+
+[command:lock-pc]
+run = shell rundll32.exe user32.dll,LockWorkStation

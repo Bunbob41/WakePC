@@ -41,7 +41,9 @@ class Command:
 
 def load_config():
     parser = configparser.ConfigParser()
-    if not parser.read(CONFIG_PATH):
+    # utf-8-sig: Windows editors and PowerShell happily write a BOM, which
+    # configparser would otherwise read as part of the first line.
+    if not parser.read(CONFIG_PATH, encoding="utf-8-sig"):
         sys.exit(f"error: could not read {CONFIG_PATH}")
     main = parser["wakepc"]
     token = main.get("token", "")
@@ -91,12 +93,16 @@ def send_magic_packet(mac_hex: str, broadcast_ip: str) -> None:
 
 
 def probe_ping(ip: str, count: int) -> dict:
-    """Ping `ip` `count` times and report awake + rtt stats (iputils output)."""
+    """Ping `ip` `count` times and report awake + rtt stats."""
     count = max(1, min(count, 10))
-    args = ["ping", "-c", str(count), "-W", "1"]
-    if count > 1:
-        args += ["-i", "1"]
-    args.append(ip)
+    if sys.platform == "win32":
+        # Windows ping speaks a different dialect and has no interval flag.
+        args = ["ping", "-n", str(count), "-w", "1000", ip]
+    else:
+        args = ["ping", "-c", str(count), "-W", "1"]
+        if count > 1:
+            args += ["-i", "1"]
+        args.append(ip)
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=count * 2 + 3)
     except subprocess.TimeoutExpired:
@@ -110,6 +116,16 @@ def probe_ping(ip: str, count: int) -> dict:
         body["min_ms"] = float(rtt.group(1))
         body["avg_ms"] = float(rtt.group(2))
         body["max_ms"] = float(rtt.group(3))
+    else:
+        win = re.search(r"Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms", result.stdout)
+        if win:
+            body["min_ms"] = float(win.group(1))
+            body["max_ms"] = float(win.group(2))
+            body["avg_ms"] = float(win.group(3))
+    if "loss_pct" not in body:
+        lost = re.search(r"\((\d+)% loss\)", result.stdout)
+        if lost:
+            body["loss_pct"] = float(lost.group(1))
     return body
 
 

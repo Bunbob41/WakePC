@@ -14,6 +14,9 @@ Two halves:
   It also serves a browser control panel at `/`. Everything is behind a bearer
   token (a PIN or passphrase) with a brute-force lockout. Setup is in
   [pi/README.md](pi/README.md).
+- **`pc/`** — the same service for a Windows machine, so the PC can be shut
+  down, restarted, slept or locked from the phone. The Pi wakes it; the PC
+  does the things only it can do. See [pc/README.md](pc/README.md).
 - **The Android app** (`app/`) — Jetpack Compose. The home screen shows a card
   per machine with live status over a configurable hero button; a Quick
   Settings tile fires your chosen command, and a home-screen widget lists your

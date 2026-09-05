@@ -58,6 +58,16 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(reboot.run, ("shell", "sudo /usr/sbin/reboot"))
         self.assertIsNone(reboot.ping)
 
+    def test_reads_a_config_written_with_a_bom(self):
+        # PowerShell and Notepad both write UTF-8 with a BOM; configparser
+        # would otherwise see it as part of the first line and find no
+        # section header at all.
+        handle = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False, encoding="utf-8-sig")
+        handle.write(VALID)
+        handle.close()
+        wakepc.CONFIG_PATH = handle.name
+        self.assertEqual(wakepc.load_config()["token"], "test-token")
+
     def test_rejects_bad_configs(self):
         for label, text in [
             ("short token", VALID.replace("token = test-token", "token = 65")),
