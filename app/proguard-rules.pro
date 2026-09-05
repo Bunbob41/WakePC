@@ -42,6 +42,13 @@
 -keep class androidx.work.impl.WorkDatabase_Impl { *; }
 -keep class androidx.work.impl.WorkDatabase { *; }
 
+# WorkManager creates InputMergers and Workers with Class.newInstance(), so
+# R8 sees their constructors as unused and deletes them. The failure is only
+# logged, never thrown: the worker silently never runs, so Glance never
+# composes and every widget sits on the loading spinner forever.
+-keep class * extends androidx.work.InputMerger { <init>(); }
+-keep class * extends androidx.work.ListenableWorker { <init>(...); }
+
 # Quieter, and harmless: these are optional deps referenced by OkHttp.
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
