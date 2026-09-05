@@ -40,11 +40,19 @@ interface WakeRepository {
 object WakeApi : WakeRepository {
     private const val FULL_LOSS_PCT = 100.0
 
+    // Set once from Application; without it we simply resolve as before.
+    @Volatile private var appContext: android.content.Context? = null
+
+    fun attach(context: android.content.Context) {
+        appContext = context
+    }
+
     private val client =
         OkHttpClient
             .Builder()
             .connectTimeout(4, TimeUnit.SECONDS)
             .callTimeout(10, TimeUnit.SECONDS)
+            .dns(SearchDomainDns({ appContext?.let(::networkSearchDomains).orEmpty() }))
             .build()
 
     // Multi-ping probes take count seconds server-side; give them room.
@@ -142,7 +150,7 @@ object WakeApi : WakeRepository {
 private fun describe(failure: Throwable?): String =
     when (failure) {
         is java.net.UnknownHostException -> {
-            "can't resolve that name — use the full name (host.tailnet.ts.net) or the IP"
+            "can't resolve that name — check it, or use the IP"
         }
 
         is java.net.SocketTimeoutException -> {

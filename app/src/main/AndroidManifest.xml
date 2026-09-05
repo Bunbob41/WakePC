@@ -2,10 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Reads the DNS search domains Tailscale advertises, so bare
+         MagicDNS names resolve the way they do on a desktop. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- usesCleartextTraffic: the app only ever talks to the Pi over the tailnet,
          where WireGuard already encrypts everything in transit. -->
     <application
+        android:name=".WakePcApp"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
