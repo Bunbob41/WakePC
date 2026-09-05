@@ -48,5 +48,27 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/wake_widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".WakeWidgetCompactReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/wake_widget_info_compact" />
+        </receiver>
+
+        <receiver
+            android:name=".WakeWidgetMediumReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/wake_widget_info_medium" />
+        </receiver>
     </application>
 </manifest>

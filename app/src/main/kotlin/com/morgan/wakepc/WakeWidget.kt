@@ -3,6 +3,7 @@ package com.morgan.wakepc
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
@@ -12,12 +13,14 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
@@ -52,6 +55,17 @@ import kotlinx.coroutines.delay
 class WakeWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
+    // One widget that renders for its actual size, so the three providers below
+    // (and any resize afterwards) all stay correct when the widget redraws.
+    override val sizeMode =
+        SizeMode.Responsive(
+            setOf(
+                DpSize(110.dp, 55.dp),
+                DpSize(180.dp, 110.dp),
+                DpSize(300.dp, 200.dp),
+            ),
+        )
+
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
@@ -65,6 +79,16 @@ class WakeWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WakeWidget()
 }
 
+/** 2x1 entry in the picker: just the hero. */
+class WakeWidgetCompactReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = WakeWidget()
+}
+
+/** 2x2 entry in the picker. */
+class WakeWidgetMediumReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = WakeWidget()
+}
+
 /** Per-machine status cached in the widget's own state, so it paints instantly. */
 internal fun statusKey(machineId: String) = stringPreferencesKey("status_$machineId")
 
@@ -74,37 +98,42 @@ internal val commandParam = ActionParameters.Key<String>("command")
 @Composable
 private fun WidgetBody(appState: AppState) {
     val prefs = currentState<Preferences>()
+    val height = LocalSize.current.height
+    val showHeader = height >= HEADER_MIN_HEIGHT
+    val showMachines = height >= MACHINES_MIN_HEIGHT
     Column(
         modifier =
             GlanceModifier
                 .fillMaxSize()
                 .background(ColorProvider(Palette.bg))
                 .cornerRadius(16.dp)
-                .padding(12.dp),
+                .padding(if (showHeader) 12.dp else 8.dp),
     ) {
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Image(
-                provider = ImageProvider(R.drawable.ic_power_stroke),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
-                modifier = GlanceModifier.size(12.dp),
-            )
-            Spacer(GlanceModifier.width(8.dp))
-            Text(
-                "WAKEPC",
-                style = console(10, Palette.text, FontWeight.Bold),
-                modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>()),
-            )
-            Text(
-                "refresh",
-                style = console(9, Palette.dim),
-                modifier = GlanceModifier.clickable(actionRunCallback<RefreshAction>()),
-            )
+        if (showHeader) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_power_stroke),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
+                    modifier = GlanceModifier.size(12.dp),
+                )
+                Spacer(GlanceModifier.width(8.dp))
+                Text(
+                    "WAKEPC",
+                    style = console(10, Palette.text, FontWeight.Bold),
+                    modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>()),
+                )
+                Text(
+                    "refresh",
+                    style = console(9, Palette.dim),
+                    modifier = GlanceModifier.clickable(actionRunCallback<RefreshAction>()),
+                )
+            }
+            Spacer(GlanceModifier.height(8.dp))
         }
-        Spacer(GlanceModifier.height(8.dp))
 
         val hero = appState.resolve(appState.hero)
         if (hero != null) {
@@ -114,7 +143,7 @@ private fun WidgetBody(appState: AppState) {
 
         if (appState.machines.isEmpty()) {
             Text("no machines yet — tap to open", style = console(11, Palette.dim))
-        } else {
+        } else if (showMachines) {
             appState.machines
                 .filter { it.id != hero?.machine?.id }
                 .forEach { machine ->
@@ -208,6 +237,11 @@ private fun MachineRow(
 }
 
 private const val MISSING_COLOR = 0xFF5F6871
+
+// Below these the widget drops the header, then the machine list, so the hero
+// always survives at the smallest size.
+private val HEADER_MIN_HEIGHT = 90.dp
+private val MACHINES_MIN_HEIGHT = 130.dp
 
 private fun statusColor(status: String) =
     when {
