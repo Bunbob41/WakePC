@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B0D0F</color>
+    <!-- Mirrors Palette in Ui.kt, for the widget's static picker preview. -->
+    <color name="console_bg">#0B0D0F</color>
+    <color name="console_card">#101315</color>
+    <color name="console_hero_bg">#170F0D</color>
+    <color name="console_text">#E6E3DC</color>
+    <color name="console_dim">#5F6871</color>
+    <color name="console_faint">#3A434C</color>
+    <color name="console_green">#45D06D</color>
+    <color name="console_red">#FF5D49</color>
 </resources>
