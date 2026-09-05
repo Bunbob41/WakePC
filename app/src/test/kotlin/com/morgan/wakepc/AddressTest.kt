@@ -34,10 +34,31 @@ class AddressTest {
     }
 
     @Test
-    fun `token keeps the last whitespace-delimited chunk`() {
+    fun `a token is taken as typed`() {
         assertEquals("test-token", cleanToken("  test-token "))
-        assertEquals("test-token", cleanToken("Token: test-token"))
         assertEquals("alpha-bravo-charlie", cleanToken("alpha-bravo-charlie"))
+        assertEquals("6548", cleanToken("6548"))
         assertEquals("", cleanToken(""))
+    }
+
+    /** Typing a word passphrase with spaces is the natural thing to do. */
+    @Test
+    fun `spaced words become one hyphenated passphrase`() {
+        assertEquals("lemon-jade-panda-cricket", cleanToken("lemon jade panda cricket"))
+        assertEquals("lemon-jade-panda-cricket", cleanToken("  lemon  jade panda   cricket "))
+        assertEquals("lemon-jade-panda-cricket", cleanToken("lemon-jade-panda-cricket"))
+    }
+
+    @Test
+    fun `a pasted label is dropped, not glued on`() {
+        assertEquals("6548", cleanToken("Token: 6548"))
+        assertEquals("lemon-jade", cleanToken("Token: lemon jade"))
+    }
+
+    /** Anything that is not plain words keeps the old last-chunk rescue. */
+    @Test
+    fun `mixed junk still falls back to the last chunk`() {
+        assertEquals("abc123XYZ", cleanToken("Bearer abc123XYZ"))
+        assertEquals("hex0f9", cleanToken("some/label hex0f9"))
     }
 }

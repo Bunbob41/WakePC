@@ -27,12 +27,29 @@ fun cleanUrl(raw: String): String {
     return "http://$withPort"
 }
 
-fun cleanToken(raw: String): String =
-    raw
-        .trim()
-        .split(whitespace)
-        .lastOrNull()
-        .orEmpty()
+private val plainWord = Regex("^[a-z0-9]+$")
+
+/**
+ * Accepts a token however it arrives.
+ *
+ * Word passphrases are hyphenated, but typing them with spaces is the natural
+ * thing to do, so several plain words become one hyphenated token. A pasted
+ * label ("Token: 1234") is dropped first, and anything else keeps the old
+ * behaviour of taking the last chunk, which is what rescues a paste that
+ * dragged extra text along with it.
+ */
+fun cleanToken(raw: String): String {
+    val parts = raw.trim().split(whitespace).filter { it.isNotBlank() }
+    if (parts.size <= 1) return parts.firstOrNull().orEmpty()
+
+    val withoutLabel = if (parts.first().endsWith(":")) parts.drop(1) else parts
+    if (withoutLabel.isEmpty()) return ""
+    return if (withoutLabel.size > 1 && withoutLabel.all { plainWord.matches(it) }) {
+        withoutLabel.joinToString("-")
+    } else {
+        withoutLabel.last()
+    }
+}
 
 data class Connection(
     val id: String = UUID.randomUUID().toString(),
