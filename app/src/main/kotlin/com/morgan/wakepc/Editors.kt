@@ -239,11 +239,11 @@ fun ConnectionEditor(
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("ADDRESS")
-                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "100.x.y.z or pi-name")
+                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "100.x.y.z or host.tailnet.ts.net")
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("FALLBACK ADDRESS · OPTIONAL")
-                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "second address, tried if the first fails")
+                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "e.g. the tailscale IP, tried if the first fails")
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("TOKEN")

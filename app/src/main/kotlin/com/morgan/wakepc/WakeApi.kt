@@ -128,7 +128,32 @@ object WakeApi : WakeRepository {
                 }
                 failure = attempt.exceptionOrNull()
             }
-            AppLog.log("$label · ${failure?.message ?: "failed"}", ok = false)
-            Result.failure(failure ?: IllegalStateException("unreachable"))
+            val reason = describe(failure)
+            AppLog.log("$label · $reason", ok = false)
+            Result.failure(failure ?: IllegalStateException(reason))
         }
 }
+
+/**
+ * Android does not apply Tailscale's DNS search domain to app lookups, so a
+ * bare MagicDNS name like "pi-nd" resolves from a desktop but never from the
+ * phone. Say so, instead of surfacing a raw resolver exception.
+ */
+private fun describe(failure: Throwable?): String =
+    when (failure) {
+        is java.net.UnknownHostException -> {
+            "can't resolve that name — use the full name (host.tailnet.ts.net) or the IP"
+        }
+
+        is java.net.SocketTimeoutException -> {
+            "timed out — is the machine awake and on the tailnet?"
+        }
+
+        null -> {
+            "failed"
+        }
+
+        else -> {
+            failure.message ?: failure::class.simpleName ?: "failed"
+        }
+    }

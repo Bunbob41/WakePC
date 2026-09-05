@@ -36,9 +36,14 @@ name* — it can never send shell across the wire.
    [latest release](https://github.com/Bunbob41/WakePC/releases/latest) on your
    phone and open it (Android will ask you to allow installs from your browser
    the first time). Or build it yourself — see Development below.
-3. Open WakePC and add a connection: name it, enter the Pi's address
-   (`100.x.y.z` or a MagicDNS name — scheme and port are filled in), and the
+3. Open WakePC and add a connection: name it, enter the Pi's address, and the
    token. "Scan setup qr" against the Pi panel does this without typing.
+
+   Use the Tailscale IP (`100.x.y.z`) or the **full** MagicDNS name
+   (`host.tailnet.ts.net`) — scheme and port are filled in for you. A bare
+   short name like `mypi` works from a desktop but not from Android, which
+   does not apply Tailscale's DNS search domain to app lookups. Putting the
+   full name in the address and the IP in the fallback covers both.
 4. Add a machine and pick its commands. Then either drag the **Wake PC** tile
    into Quick Settings, or long-press your home screen -> Widgets -> WakePC for
    a widget with a row per machine.
