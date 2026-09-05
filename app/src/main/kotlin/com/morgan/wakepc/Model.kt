@@ -46,6 +46,12 @@ data class Connection(
 data class CommandRef(
     val name: String,
     val ping: Boolean,
+    /**
+     * Which connection serves this command. Null means the machine's own —
+     * how every command looked before a machine could draw from more than
+     * one relay, e.g. wake via the Pi and shutdown from the PC itself.
+     */
+    val connectionId: String? = null,
 )
 
 data class Machine(
@@ -75,10 +81,16 @@ data class AppState(
 
     fun resolve(ref: ButtonRef?): ResolvedButton? {
         val machine = machine(ref?.machineId) ?: return null
-        val connection = connection(machine.connectionId) ?: return null
         val command = machine.commands.firstOrNull { it.name == ref?.command } ?: return null
+        val connection = connectionFor(machine, command) ?: return null
         return ResolvedButton(machine, connection, command)
     }
+
+    /** The relay that runs this command: its own, else the machine's. */
+    fun connectionFor(
+        machine: Machine,
+        command: CommandRef,
+    ): Connection? = connection(command.connectionId ?: machine.connectionId)
 }
 
 data class ResolvedButton(
@@ -138,7 +150,12 @@ internal fun encodeState(state: AppState): String {
                             "commands",
                             JSONArray().also { cs ->
                                 m.commands.forEach { c ->
-                                    cs.put(JSONObject().put("name", c.name).put("ping", c.ping))
+                                    cs.put(
+                                        JSONObject()
+                                            .put("name", c.name)
+                                            .put("ping", c.ping)
+                                            .put("connectionId", c.connectionId ?: JSONObject.NULL),
+                                    )
                                 }
                             },
                         ),
@@ -176,7 +193,11 @@ internal fun decodeState(json: String): AppState =
                         connectionId = o.optString("connectionId"),
                         commands =
                             o.optJSONArray("commands").toObjectList { c ->
-                                CommandRef(c.getString("name"), c.optBoolean("ping"))
+                                CommandRef(
+                                    name = c.getString("name"),
+                                    ping = c.optBoolean("ping"),
+                                    connectionId = c.optString("connectionId").takeIf { it.isNotBlank() },
+                                )
                             },
                     )
                 },

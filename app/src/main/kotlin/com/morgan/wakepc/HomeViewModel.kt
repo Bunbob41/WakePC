@@ -64,8 +64,8 @@ class HomeViewModel(
 
     private suspend fun pollOnce() {
         state.value.machines.forEach { machine ->
-            val connection = state.value.connection(machine.connectionId) ?: return@forEach
             val pingCmd = machine.commands.firstOrNull { it.ping } ?: return@forEach
+            val connection = state.value.connectionFor(machine, pingCmd) ?: return@forEach
             if (_runtime.value[machine.id]?.running != null) return@forEach
             api.stats(connection, pingCmd.name).onSuccess { stats ->
                 update(machine.id) { it.copy(awake = stats.awake, avgMs = stats.avgMs ?: it.avgMs) }

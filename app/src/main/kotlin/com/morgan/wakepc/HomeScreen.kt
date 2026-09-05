@@ -88,13 +88,13 @@ fun HomeScreen(
                     awake = if (pingCmd != null) rt.awake else null,
                     avgMs = if (pingCmd != null) rt.avgMs else null,
                     runningCommand = rt.running,
-                    onRun = { cmd -> connection?.let { vm.run(machine, it, cmd) } },
+                    onRun = { cmd -> state.connectionFor(machine, cmd)?.let { vm.run(machine, it, cmd) } },
                     onEdit = { onEditMachine(machine.id) },
                     onProbe =
-                        if (pingCmd != null && connection != null) {
-                            { vm.probe(machine, connection, pingCmd) }
-                        } else {
-                            null
+                        pingCmd?.let { cmd ->
+                            state.connectionFor(machine, cmd)?.let { conn ->
+                                { vm.probe(machine, conn, cmd) }
+                            }
                         },
                 )
             }

@@ -49,9 +49,11 @@ val connectionColors =
 /** Bundles can't hold CommandRef, so flatten to name/ping pairs. */
 private val commandsSaver =
     listSaver<List<CommandRef>, Any>(
-        save = { list -> list.flatMap { listOf(it.name, it.ping) } },
+        save = { list -> list.flatMap { listOf(it.name, it.ping, it.connectionId ?: "") } },
         restore = { flat ->
-            flat.chunked(2).map { CommandRef(it[0] as String, it[1] as Boolean) }
+            flat.chunked(3).map {
+                CommandRef(it[0] as String, it[1] as Boolean, (it[2] as String).takeIf(String::isNotBlank))
+            }
         },
     )
 
@@ -336,8 +338,11 @@ fun MachineEditor(
     var selected by rememberSaveable(stateSaver = commandsSaver) {
         mutableStateOf<List<CommandRef>>(emptyList())
     }
-    var available by remember { mutableStateOf<List<CommandRef>?>(null) }
-    var fetchError by remember { mutableStateOf<String?>(null) }
+    // Commands offered by each connection, so one machine can mix them —
+    // wake from the Pi, shutdown from the machine itself.
+    var offered by remember { mutableStateOf<Map<String, List<CommandRef>>>(emptyMap()) }
+    var fetchErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var fetching by remember { mutableStateOf(true) }
     var connections by remember { mutableStateOf<List<Connection>>(emptyList()) }
 
     LaunchedEffect(machineId) {
@@ -359,20 +364,26 @@ fun MachineEditor(
     }
     if (!loaded) return
 
-    val connection = connections.firstOrNull { it.id == connectionId }
-
-    LaunchedEffect(connectionId) {
-        available = null
-        fetchError = null
-        val conn = connections.firstOrNull { it.id == connectionId } ?: return@LaunchedEffect
-        WakeApi.fetchCommands(conn).fold(
-            onSuccess = { fetched ->
-                available = fetched
-                // A brand-new machine starts with everything checked; uncheck to trim.
-                if (machineId == null && selected.isEmpty()) selected = fetched
-            },
-            onFailure = { fetchError = it.message },
-        )
+    LaunchedEffect(connections) {
+        if (connections.isEmpty()) return@LaunchedEffect
+        fetching = true
+        val results = mutableMapOf<String, List<CommandRef>>()
+        val errors = mutableMapOf<String, String>()
+        connections.forEach { conn ->
+            WakeApi.fetchCommands(conn).fold(
+                onSuccess = { fetched ->
+                    results[conn.id] = fetched.map { it.copy(connectionId = conn.id) }
+                },
+                onFailure = { errors[conn.id] = it.message ?: "unreachable" },
+            )
+        }
+        offered = results
+        fetchErrors = errors
+        fetching = false
+        // A brand-new machine starts with its own connection's commands checked.
+        if (machineId == null && selected.isEmpty()) {
+            selected = results[connectionId].orEmpty()
+        }
     }
 
     EditorScaffold(if (machineId == null) "NEW MACHINE" else "EDIT MACHINE", onBack = onDone) {
@@ -424,63 +435,74 @@ fun MachineEditor(
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("BUTTONS · FROM ${connection?.name?.uppercase() ?: "?"}")
-                when {
-                    fetchError != null -> {
-                        ConsoleText("couldn't reach: $fetchError", size = 11, color = Palette.red)
-                    }
+                SectionLabel("BUTTONS")
+                if (fetching) {
+                    ConsoleText("fetching commands…", size = 11, color = Palette.dim)
+                }
+                connections.forEach { conn ->
+                    val commands = offered[conn.id].orEmpty()
+                    val error = fetchErrors[conn.id]
+                    if (commands.isEmpty() && error == null) return@forEach
 
-                    available == null -> {
-                        ConsoleText("fetching commands…", size = 11, color = Palette.dim)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 6.dp),
+                    ) {
+                        Box(modifier = Modifier.size(8.dp).background(Color(conn.color), CircleShape))
+                        ConsoleText(conn.name.uppercase(), size = 10, color = Palette.dim, letterSpacing = 2.0)
                     }
-
-                    else -> {
-                        available.orEmpty().forEach { cmd ->
-                            val isSel = selected.any { it.name == cmd.name }
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .background(if (isSel) Palette.selBg else Palette.card, RoundedCornerShape(6.dp))
-                                        .border(
-                                            1.dp,
-                                            if (isSel) Palette.selBorder else Palette.border,
-                                            RoundedCornerShape(6.dp),
-                                        ).clickable {
-                                            selected =
-                                                if (isSel) {
-                                                    selected.filterNot { it.name == cmd.name }
-                                                } else {
-                                                    selected + cmd
+                    if (error != null) {
+                        ConsoleText("couldn't reach: $error", size = 11, color = Palette.red)
+                    }
+                    commands.forEach { cmd ->
+                        val isSel = selected.any { it.name == cmd.name && it.connectionId == cmd.connectionId }
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(if (isSel) Palette.selBg else Palette.card, RoundedCornerShape(6.dp))
+                                    .border(
+                                        1.dp,
+                                        if (isSel) Palette.selBorder else Palette.border,
+                                        RoundedCornerShape(6.dp),
+                                    ).clickable {
+                                        selected =
+                                            if (isSel) {
+                                                selected.filterNot {
+                                                    it.name == cmd.name && it.connectionId == cmd.connectionId
                                                 }
-                                        }.padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (isSel) {
-                                    TintedIcon(R.drawable.ic_check, Palette.green, size = 15.dp)
-                                } else {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(15.dp)
-                                                .border(1.dp, Palette.faint, RoundedCornerShape(3.dp)),
-                                    )
-                                }
-                                ConsoleText(
-                                    cmd.name,
-                                    size = 13,
-                                    color = if (isSel) Palette.text else Palette.sub,
-                                    modifier = Modifier.padding(start = 12.dp).weight(1f),
+                                            } else {
+                                                selected + cmd
+                                            }
+                                    }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (isSel) {
+                                TintedIcon(R.drawable.ic_check, Palette.green, size = 15.dp)
+                            } else {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(15.dp)
+                                            .border(1.dp, Palette.faint, RoundedCornerShape(3.dp)),
                                 )
-                                if (cmd.ping) {
-                                    ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
-                                }
+                            }
+                            ConsoleText(
+                                cmd.name,
+                                size = 13,
+                                color = if (isSel) Palette.text else Palette.sub,
+                                modifier = Modifier.padding(start = 12.dp).weight(1f),
+                            )
+                            if (cmd.ping) {
+                                ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
                             }
                         }
                     }
                 }
                 ConsoleText(
-                    "fetched from the connection — add commands in its config file and they appear here",
+                    "pick from any connection — wake this machine through the pi, " +
+                        "shut it down through the machine itself",
                     size = 11,
                     color = Palette.faint,
                 )

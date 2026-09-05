@@ -71,4 +71,37 @@ class StateTest {
         // Machine kept, its connection deleted.
         assertNull(state.copy(connections = emptyList()).resolve(state.hero))
     }
+
+    @Test
+    fun `a command can name its own connection, so one machine spans two relays`() {
+        // Wake runs through the pi; shutdown runs on the machine itself.
+        val pc = Connection(id = "c2", name = "desk pc", baseUrl = "http://pc:8787", token = "t")
+        val mixed =
+            machine.copy(
+                commands =
+                    listOf(
+                        CommandRef("wake-pc", ping = true),
+                        CommandRef("shutdown-pc", ping = false, connectionId = "c2"),
+                    ),
+            )
+        val s = state.copy(connections = listOf(connection, pc), machines = listOf(mixed))
+
+        assertEquals("my pi", s.resolve(ButtonRef("m1", "wake-pc"))!!.connection.name)
+        assertEquals("desk pc", s.resolve(ButtonRef("m1", "shutdown-pc"))!!.connection.name)
+    }
+
+    @Test
+    fun `a command whose connection is gone resolves to nothing`() {
+        val orphan = machine.copy(commands = listOf(CommandRef("x", ping = false, connectionId = "deleted")))
+        val s = state.copy(machines = listOf(orphan))
+        assertNull(s.resolve(ButtonRef("m1", "x")))
+    }
+
+    @Test
+    fun `per-command connections survive the round trip`() {
+        val mixed =
+            machine.copy(commands = listOf(CommandRef("shutdown-pc", ping = false, connectionId = "c2")))
+        val s = state.copy(machines = listOf(mixed))
+        assertEquals(s, decodeState(encodeState(s)))
+    }
 }

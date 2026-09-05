@@ -21,6 +21,13 @@ Nothing here needs administrator rights, and no firewall rule is required:
 Tailscale's interface is already permitted, so the service is reachable from
 your tailnet and from nowhere else.
 
+## One machine, two relays
+
+A machine in the app can take commands from more than one connection, so your
+PC shows up as a single card with `wake-pc` (through the Pi) and `shutdown-pc`
+(through the PC itself) side by side. In the machine editor the commands are
+grouped by connection — tick whichever you want, from either.
+
 ## Commands
 
 `wakepc.conf.example` ships with four, and you can edit

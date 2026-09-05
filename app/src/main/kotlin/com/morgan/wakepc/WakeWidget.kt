@@ -426,8 +426,8 @@ class RefreshAction : ActionCallback {
     ) {
         val state = Store(context.applicationContext).current()
         state.machines.forEach { machine ->
-            val connection = state.connection(machine.connectionId) ?: return@forEach
             val ping = machine.commands.firstOrNull { it.ping } ?: return@forEach
+            val connection = state.connectionFor(machine, ping) ?: return@forEach
             val stats = WakeApi.stats(connection, ping.name).getOrNull()
             val label =
                 when {
