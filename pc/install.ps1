@@ -60,26 +60,62 @@ if (Test-Path $conf) {
     Write-Host "wrote $conf"
 }
 
-# Autostart via the Startup folder rather than Task Scheduler: it needs no
-# elevation, and on some machines the scheduler refuses to launch user tasks
-# at all (every action returns "file not found", even cmd.exe).
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$elevated = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+
 $startup  = [Environment]::GetFolderPath('Startup')
 $launcher = Join-Path $startup 'WakePC.vbs'
-$vbs = 'CreateObject("WScript.Shell").Run """' + $python + '"" ""' + $runner + '""", 0, False'
-[IO.File]::WriteAllText($launcher, $vbs, (New-Object Text.UTF8Encoding($false)))
 
-# Stop an older copy, then start this one now so it is usable immediately.
+# Stop whatever is already running before starting a new copy.
 Get-CimInstance Win32_Process -Filter "Name like 'python%'" |
     Where-Object { $_.CommandLine -match [regex]::Escape($runner) } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-Start-Process -FilePath $python -ArgumentList "`"$runner`"" -WindowStyle Hidden
-Start-Sleep -Seconds 3
+
+if ($elevated) {
+    # Elevated: run at boot as SYSTEM, so the machine can be shut down even
+    # after a remote wake, before anyone has logged in. The logon launcher
+    # would only duplicate this, so remove it.
+    Remove-Item $launcher -Force -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName 'WakePC' -Confirm:$false -ErrorAction SilentlyContinue
+
+    $action    = New-ScheduledTaskAction -Execute $python -Argument "`"$runner`""
+    $trigger   = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval ([TimeSpan]::FromMinutes(1))
+
+    Register-ScheduledTask -TaskName 'WakePC' -Action $action -Trigger $trigger `
+        -Principal $principal -Settings $settings -Force | Out-Null
+    Start-ScheduledTask -TaskName 'WakePC'
+    $note = 'runs at boot as SYSTEM'
+} else {
+    # Unelevated: the Startup folder is the only autostart available, and it
+    # needs no permissions. Task Scheduler is not used - some machines refuse
+    # to run user tasks at all, returning "file not found" for any action.
+    $vbs = 'CreateObject("WScript.Shell").Run """' + $python + '"" ""' + $runner + '""", 0, False'
+    [IO.File]::WriteAllText($launcher, $vbs, (New-Object Text.UTF8Encoding($false)))
+    Start-Process -FilePath $python -ArgumentList "`"$runner`"" -WindowStyle Hidden
+    $note = 'runs at logon (re-run this as Administrator to start it at boot instead)'
+}
+
+# Do not claim success without checking: poll until it actually answers.
+$port = (Select-String -Path $conf -Pattern '^port = (.*)$').Matches.Groups[1].Value.Trim()
+$up = $false
+foreach ($i in 1..10) {
+    Start-Sleep -Seconds 1
+    if (Get-CimInstance Win32_Process -Filter "Name like 'python%'" |
+        Where-Object { $_.CommandLine -match [regex]::Escape($runner) }) { $up = $true; break }
+}
+if (-not $up) {
+    Write-Warning "the service did not start - see $log"
+    if ($elevated) { Write-Warning 'if the task never runs, this machine may block Scheduled Tasks; use the unelevated install instead' }
+}
 
 $bind = (Select-String -Path $conf -Pattern '^bind_host = (.*)$').Matches.Groups[1].Value
 $port = (Select-String -Path $conf -Pattern '^port = (.*)$').Matches.Groups[1].Value
 Write-Host ''
-Write-Host 'wakepc installed - starts at logon, running now'
-Write-Host "autostart: $launcher"
+Write-Host "wakepc installed - $note"
 Write-Host "listening on ${bind}:${port}"
 if ($token) { Write-Host "token: $token" }
 Write-Host "log: $log"

@@ -53,10 +53,15 @@ Start-Process pythonw "$env:LOCALAPPDATA\WakePC\run.py" -WindowStyle Hidden
 
 ## Limits worth knowing
 
-- **It runs while you are logged in.** The launcher lives in the Startup
-  folder, so after a remote wake the service is not up until someone logs in.
-  Enough to shut down a machine you left on; not enough to shut down one you
-  just woke. Running it as a boot-time service needs administrator rights.
+- **Unelevated, it runs while you are logged in.** The launcher lives in the
+  Startup folder, so after a remote wake the service is not up until someone
+  logs in — enough to shut down a machine you left on, not one you just woke.
+
+  Run the installer **as Administrator** and it registers a SYSTEM task that
+  starts at boot instead, which covers that case. It removes the logon
+  launcher so the two cannot both run. There is no unprivileged way to start
+  something before logon: the Startup folder and the Run keys are both
+  logon-triggered.
 - Some machines refuse to run user Scheduled Tasks at all (every action
   returns "file not found"), which is why this uses the Startup folder.
 
