@@ -29,6 +29,7 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -47,19 +48,23 @@ import androidx.glance.unit.ColorProvider
 import kotlinx.coroutines.delay
 
 /**
- * Home-screen widget: one row per machine, tapped to fire that machine's
- * command. A widget action cannot hold a long polling loop, so a tap fires the
- * command and takes one quick look; the refresh control and the periodic
- * update in wake_widget_info.xml pick up the result afterwards.
+ * Home-screen widget. Each placed instance targets its own machine and command
+ * (chosen in [WidgetConfigActivity] when it is dropped), and renders that
+ * button in whichever hero style the app is set to.
+ *
+ * A widget action cannot hold a long polling loop, so a tap fires the command
+ * and takes one quick look; the refresh control and the periodic update in the
+ * provider XML pick up the result afterwards.
  */
 class WakeWidget : GlanceAppWidget() {
     override val stateDefinition = PreferencesGlanceStateDefinition
 
-    // One widget that renders for its actual size, so the three providers below
-    // (and any resize afterwards) all stay correct when the widget redraws.
+    // One widget that renders for its actual size, so every provider below
+    // (and any resize afterwards) stays correct when the widget redraws.
     override val sizeMode =
         SizeMode.Responsive(
             setOf(
+                DpSize(60.dp, 60.dp),
                 DpSize(110.dp, 55.dp),
                 DpSize(180.dp, 110.dp),
                 DpSize(300.dp, 200.dp),
@@ -79,7 +84,7 @@ class WakeWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WakeWidget()
 }
 
-/** 2x1 entry in the picker: just the hero. */
+/** 2x1 entry in the picker. */
 class WakeWidgetCompactReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WakeWidget()
 }
@@ -89,18 +94,50 @@ class WakeWidgetMediumReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WakeWidget()
 }
 
+/** 1x1 entry: the power glyph alone, tinted by state. */
+class WakeWidgetIconReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = WakeWidget()
+}
+
 /** Per-machine status cached in the widget's own state, so it paints instantly. */
 internal fun statusKey(machineId: String) = stringPreferencesKey("status_$machineId")
+
+/** What this particular widget instance controls, chosen when it was placed. */
+internal val selectedMachineKey = stringPreferencesKey("selected_machine")
+internal val selectedCommandKey = stringPreferencesKey("selected_command")
 
 internal val machineIdParam = ActionParameters.Key<String>("machineId")
 internal val commandParam = ActionParameters.Key<String>("command")
 
+private const val MISSING_COLOR = 0xFF5F6871
+
+// Below these the widget drops the header, then the machine list, so the
+// button always survives at the smallest size.
+private val HEADER_MIN_HEIGHT = 90.dp
+private val MACHINES_MIN_HEIGHT = 130.dp
+private val ICON_ONLY_MAX = 80.dp
+
 @Composable
 private fun WidgetBody(appState: AppState) {
     val prefs = currentState<Preferences>()
-    val height = LocalSize.current.height
-    val showHeader = height >= HEADER_MIN_HEIGHT
-    val showMachines = height >= MACHINES_MIN_HEIGHT
+    val size = LocalSize.current
+
+    // This instance's own target, falling back to the app-wide hero for
+    // widgets placed before per-widget selection existed.
+    val chosen =
+        prefs[selectedMachineKey]?.let { machineId ->
+            prefs[selectedCommandKey]?.let { command -> ButtonRef(machineId, command) }
+        } ?: appState.hero
+    val target = appState.resolve(chosen)
+    val status = target?.let { prefs[statusKey(it.machine.id)].orEmpty() }.orEmpty()
+
+    if (size.width <= ICON_ONLY_MAX && size.height <= ICON_ONLY_MAX) {
+        IconOnly(target, status)
+        return
+    }
+
+    val showHeader = size.height >= HEADER_MIN_HEIGHT
+    val showMachines = size.height >= MACHINES_MIN_HEIGHT
     Column(
         modifier =
             GlanceModifier
@@ -135,17 +172,16 @@ private fun WidgetBody(appState: AppState) {
             Spacer(GlanceModifier.height(8.dp))
         }
 
-        val hero = appState.resolve(appState.hero)
-        if (hero != null) {
-            HeroRow(hero, prefs[statusKey(hero.machine.id)].orEmpty())
+        if (target != null) {
+            HeroButton(appState.heroStyle, target, status, size)
             Spacer(GlanceModifier.height(6.dp))
+        } else {
+            Text("tap to set this widget up", style = console(11, Palette.dim))
         }
 
-        if (appState.machines.isEmpty()) {
-            Text("no machines yet — tap to open", style = console(11, Palette.dim))
-        } else if (showMachines) {
+        if (showMachines) {
             appState.machines
-                .filter { it.id != hero?.machine?.id }
+                .filter { it.id != target?.machine?.id }
                 .forEach { machine ->
                     MachineRow(
                         machine = machine,
@@ -157,44 +193,133 @@ private fun WidgetBody(appState: AppState) {
     }
 }
 
-/** The configured hero, given the prominence it has in the app. */
+/** The 1x1: nothing but the glyph, coloured by what the machine is doing. */
 @Composable
-private fun HeroRow(
-    hero: ResolvedButton,
+private fun IconOnly(
+    target: ResolvedButton?,
     status: String,
 ) {
-    Row(
+    Box(
         modifier =
             GlanceModifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .background(ColorProvider(Palette.heroBg))
-                .cornerRadius(12.dp)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .clickable(
-                    actionRunCallback<RunAction>(
-                        actionParametersOf(
-                            machineIdParam to hero.machine.id,
-                            commandParam to hero.command.name,
-                        ),
-                    ),
-                ),
-        verticalAlignment = Alignment.CenterVertically,
+                .cornerRadius(24.dp)
+                .then(if (target != null) GlanceModifier.clickable(runAction(target)) else GlanceModifier),
+        contentAlignment = Alignment.Center,
     ) {
         Image(
             provider = ImageProvider(R.drawable.ic_power_stroke),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
-            modifier = GlanceModifier.size(20.dp),
+            contentDescription = target?.machine?.name ?: "WakePC",
+            colorFilter = ColorFilter.tint(ColorProvider(statusColor(status))),
+            modifier = GlanceModifier.size(32.dp),
         )
-        Spacer(GlanceModifier.width(10.dp))
-        Text(
-            hero.machine.name.ifBlank { hero.command.name },
-            style = console(15, Palette.text, FontWeight.Bold),
-            modifier = GlanceModifier.defaultWeight(),
-        )
-        Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
     }
 }
+
+/** Honours the app's hero style, adapted to the space the widget actually has. */
+@Composable
+private fun HeroButton(
+    style: HeroStyle,
+    target: ResolvedButton,
+    status: String,
+    size: DpSize,
+) {
+    val label = target.machine.name.ifBlank { target.command.name }
+    val dialFits = size.height >= HEADER_MIN_HEIGHT
+    when {
+        style == HeroStyle.MINI || (style == HeroStyle.DIAL && !dialFits) -> {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth().clickable(runAction(target)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier =
+                        GlanceModifier
+                            .size(40.dp)
+                            .background(ColorProvider(Palette.heroBg))
+                            .cornerRadius(20.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_power_stroke),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
+                        modifier = GlanceModifier.size(20.dp),
+                    )
+                }
+                Spacer(GlanceModifier.width(10.dp))
+                Text(
+                    label,
+                    style = console(14, Palette.text, FontWeight.Bold),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+            }
+        }
+
+        style == HeroStyle.DIAL -> {
+            Column(
+                modifier = GlanceModifier.fillMaxWidth().clickable(runAction(target)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier =
+                        GlanceModifier
+                            .size(72.dp)
+                            .background(ColorProvider(Palette.heroBg))
+                            .cornerRadius(36.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        provider = ImageProvider(R.drawable.ic_power_stroke),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
+                        modifier = GlanceModifier.size(34.dp),
+                    )
+                }
+                Spacer(GlanceModifier.height(6.dp))
+                Text(label, style = console(12, Palette.text, FontWeight.Bold))
+                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+            }
+        }
+
+        else -> {
+            Row(
+                modifier =
+                    GlanceModifier
+                        .fillMaxWidth()
+                        .background(ColorProvider(Palette.heroBg))
+                        .cornerRadius(12.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .clickable(runAction(target)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_power_stroke),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
+                    modifier = GlanceModifier.size(20.dp),
+                )
+                Spacer(GlanceModifier.width(10.dp))
+                Text(
+                    label,
+                    style = console(15, Palette.text, FontWeight.Bold),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+            }
+        }
+    }
+}
+
+private fun runAction(target: ResolvedButton) =
+    actionRunCallback<RunAction>(
+        actionParametersOf(
+            machineIdParam to target.machine.id,
+            commandParam to target.command.name,
+        ),
+    )
 
 @Composable
 private fun MachineRow(
@@ -203,14 +328,13 @@ private fun MachineRow(
     status: String,
 ) {
     val command = machine.commands.firstOrNull { it.ping } ?: machine.commands.firstOrNull()
-    val tappable = command != null && connection != null
     Row(
         modifier =
             GlanceModifier
                 .fillMaxWidth()
                 .padding(vertical = 6.dp)
                 .then(
-                    if (tappable) {
+                    if (command != null && connection != null) {
                         GlanceModifier.clickable(
                             actionRunCallback<RunAction>(
                                 actionParametersOf(
@@ -235,13 +359,6 @@ private fun MachineRow(
         Text(status.ifBlank { "—" }, style = console(9, statusColor(status)))
     }
 }
-
-private const val MISSING_COLOR = 0xFF5F6871
-
-// Below these the widget drops the header, then the machine list, so the hero
-// always survives at the smallest size.
-private val HEADER_MIN_HEIGHT = 90.dp
-private val MACHINES_MIN_HEIGHT = 130.dp
 
 private fun statusColor(status: String) =
     when {
