@@ -106,17 +106,64 @@ private fun WidgetBody(appState: AppState) {
         }
         Spacer(GlanceModifier.height(8.dp))
 
+        val hero = appState.resolve(appState.hero)
+        if (hero != null) {
+            HeroRow(hero, prefs[statusKey(hero.machine.id)].orEmpty())
+            Spacer(GlanceModifier.height(6.dp))
+        }
+
         if (appState.machines.isEmpty()) {
             Text("no machines yet — tap to open", style = console(11, Palette.dim))
         } else {
-            appState.machines.forEach { machine ->
-                MachineRow(
-                    machine = machine,
-                    connection = appState.connection(machine.connectionId),
-                    status = prefs[statusKey(machine.id)].orEmpty(),
-                )
-            }
+            appState.machines
+                .filter { it.id != hero?.machine?.id }
+                .forEach { machine ->
+                    MachineRow(
+                        machine = machine,
+                        connection = appState.connection(machine.connectionId),
+                        status = prefs[statusKey(machine.id)].orEmpty(),
+                    )
+                }
         }
+    }
+}
+
+/** The configured hero, given the prominence it has in the app. */
+@Composable
+private fun HeroRow(
+    hero: ResolvedButton,
+    status: String,
+) {
+    Row(
+        modifier =
+            GlanceModifier
+                .fillMaxWidth()
+                .background(ColorProvider(Palette.heroBg))
+                .cornerRadius(12.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clickable(
+                    actionRunCallback<RunAction>(
+                        actionParametersOf(
+                            machineIdParam to hero.machine.id,
+                            commandParam to hero.command.name,
+                        ),
+                    ),
+                ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(
+            provider = ImageProvider(R.drawable.ic_power_stroke),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(ColorProvider(Palette.red)),
+            modifier = GlanceModifier.size(20.dp),
+        )
+        Spacer(GlanceModifier.width(10.dp))
+        Text(
+            hero.machine.name.ifBlank { hero.command.name },
+            style = console(15, Palette.text, FontWeight.Bold),
+            modifier = GlanceModifier.defaultWeight(),
+        )
+        Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
     }
 }
 

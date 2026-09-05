@@ -7,7 +7,8 @@
          where WireGuard already encrypts everything in transit. -->
     <application
         android:label="@string/app_name"
-        android:icon="@drawable/ic_power"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.WakePC"
         android:usesCleartextTraffic="true">
 
