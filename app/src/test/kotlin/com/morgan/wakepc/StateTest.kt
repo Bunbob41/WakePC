@@ -104,4 +104,29 @@ class StateTest {
         val s = state.copy(machines = listOf(mixed))
         assertEquals(s, decodeState(encodeState(s)))
     }
+
+    /**
+     * Exactly what 0.9.x wrote: commands had no connection of their own.
+     * Upgrading in place must keep working, not silently orphan every button.
+     */
+    @Test
+    fun `state saved by an older version still loads and resolves`() {
+        val old =
+            "{\"connections\":[{\"id\":\"c1\",\"name\":\"my pi\",\"color\":4282622061," +
+                "\"baseUrl\":\"http://pi:8787\",\"fallbackUrl\":\"\",\"token\":\"t\"}]," +
+                "\"machines\":[{\"id\":\"m1\",\"name\":\"desk pc\",\"connectionId\":\"c1\"," +
+                "\"commands\":[{\"name\":\"wake-pc\",\"ping\":true},{\"name\":\"reboot\",\"ping\":false}]}]," +
+                "\"hero\":{\"machineId\":\"m1\",\"command\":\"wake-pc\"},\"heroStyle\":\"BANNER\"," +
+                "\"tile\":{\"machineId\":\"m1\",\"command\":\"wake-pc\"}}"
+
+        val loaded = decodeState(old)
+        assertEquals(1, loaded.machines.size)
+        assertEquals(2, loaded.machines[0].commands.size)
+        // No connection of their own, so they fall back to the machine's.
+        assertNull(loaded.machines[0].commands[0].connectionId)
+        val resolved = loaded.resolve(loaded.hero)
+        assertNotNull(resolved)
+        assertEquals("my pi", resolved!!.connection.name)
+        assertEquals("wake-pc", resolved.command.name)
+    }
 }
