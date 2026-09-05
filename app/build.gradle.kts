@@ -14,22 +14,24 @@ android {
         minSdk = 31
         // 36 is what the S26 Ultra actually runs, matching the chat app's choice.
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.8.0"
+        versionCode = 17
+        versionName = "0.8.1"
     }
 
     buildTypes {
         release {
             // Personal sideloaded app: the debug key is fine and keeps installs friction-free.
             signingConfig = signingConfigs.getByName("debug")
-            // Minification and resource shrinking are OFF deliberately. The
-            // shrinker was demonstrably stripping resources that are only
-            // referenced from XML (it removed glance_default_loading_layout,
-            // which the widget needs), and R8 rewrites exactly the
-            // reflection-instantiated Glance callbacks this app relies on.
-            // Saving ~1 MB is not worth breaking a personal app.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 broke this app once (0.7.0 would not launch), so minification
+            // is back on only alongside explicit keep rules for the
+            // reflectively-instantiated Glance callbacks and widget classes,
+            // and only after verifying a minified build actually starts.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
