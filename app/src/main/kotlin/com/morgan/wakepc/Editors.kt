@@ -46,13 +46,18 @@ val connectionColors =
         0xFF3ECFC0,
     )
 
-/** Bundles can't hold CommandRef, so flatten to name/ping pairs. */
+/** Bundles can't hold CommandRef, so flatten each field in turn. */
 private val commandsSaver =
     listSaver<List<CommandRef>, Any>(
-        save = { list -> list.flatMap { listOf(it.name, it.ping, it.connectionId ?: "") } },
+        save = { list -> list.flatMap { listOf(it.name, it.ping, it.connectionId ?: "", it.elevated) } },
         restore = { flat ->
-            flat.chunked(3).map {
-                CommandRef(it[0] as String, it[1] as Boolean, (it[2] as String).takeIf(String::isNotBlank))
+            flat.chunked(4).map {
+                CommandRef(
+                    name = it[0] as String,
+                    ping = it[1] as Boolean,
+                    connectionId = (it[2] as String).takeIf(String::isNotBlank),
+                    elevated = it[3] as Boolean,
+                )
             }
         },
     )
@@ -473,7 +478,7 @@ fun MachineEditor(
                                                     it.name == cmd.name && it.connectionId == cmd.connectionId
                                                 }
                                             } else {
-                                                selected + cmd
+                                                selected + cmd.copy(elevated = looksDisruptive(cmd.name))
                                             }
                                     }.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -496,6 +501,28 @@ fun MachineEditor(
                             )
                             if (cmd.ping) {
                                 ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
+                            }
+                            if (isSel) {
+                                val picked = selected.first { it.name == cmd.name && it.connectionId == cmd.connectionId }
+                                ConsoleText(
+                                    if (picked.elevated) "LONG CODE" else "SHORT CODE",
+                                    size = 9,
+                                    color = if (picked.elevated) Palette.amber else Palette.dim,
+                                    letterSpacing = 1.5,
+                                    modifier =
+                                        Modifier
+                                            .padding(start = 10.dp)
+                                            .clickable {
+                                                selected =
+                                                    selected.map {
+                                                        if (it.name == cmd.name && it.connectionId == cmd.connectionId) {
+                                                            it.copy(elevated = !it.elevated)
+                                                        } else {
+                                                            it
+                                                        }
+                                                    }
+                                            },
+                                )
                             }
                         }
                     }

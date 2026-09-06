@@ -69,7 +69,17 @@ data class CommandRef(
      * one relay, e.g. wake via the Pi and shutdown from the PC itself.
      */
     val connectionId: String? = null,
+    /**
+     * Needs the long PIN rather than the short one, because running it
+     * actually disrupts the machine: shutting it down, restarting, sleeping.
+     */
+    val elevated: Boolean = false,
 )
+
+/** Commands whose names say they will disrupt a running machine. */
+private val disruptiveName = Regex("shut ?down|restart|reboot|sleep|suspend|hibernate|logoff|log ?out", RegexOption.IGNORE_CASE)
+
+fun looksDisruptive(commandName: String): Boolean = disruptiveName.containsMatchIn(commandName)
 
 data class Machine(
     val id: String = UUID.randomUUID().toString(),
@@ -91,7 +101,20 @@ data class AppState(
     val hero: ButtonRef? = null,
     val heroStyle: HeroStyle = HeroStyle.BANNER,
     val tile: ButtonRef? = null,
+    /** Confirmation codes. Blank means that gate is not set up yet. */
+    val shortPin: String = "",
+    val longPin: String = "",
 ) {
+    /**
+     * What a command asks for before it runs. Nothing until the PIN it would
+     * ask for actually exists, so the app keeps working before they are set.
+     */
+    fun gateFor(command: CommandRef): String =
+        when {
+            command.elevated -> longPin
+            else -> shortPin
+        }
+
     fun connection(id: String?): Connection? = connections.firstOrNull { it.id == id }
 
     fun machine(id: String?): Machine? = machines.firstOrNull { it.id == id }
@@ -171,7 +194,8 @@ internal fun encodeState(state: AppState): String {
                                         JSONObject()
                                             .put("name", c.name)
                                             .put("ping", c.ping)
-                                            .put("connectionId", c.connectionId ?: JSONObject.NULL),
+                                            .put("connectionId", c.connectionId ?: JSONObject.NULL)
+                                            .put("elevated", c.elevated),
                                     )
                                 }
                             },
@@ -183,6 +207,8 @@ internal fun encodeState(state: AppState): String {
     state.hero?.let { root.put("hero", refJson(it)) }
     state.tile?.let { root.put("tile", refJson(it)) }
     root.put("heroStyle", state.heroStyle.name)
+    root.put("shortPin", state.shortPin)
+    root.put("longPin", state.longPin)
     return root.toString()
 }
 
@@ -214,6 +240,7 @@ internal fun decodeState(json: String): AppState =
                                     name = c.getString("name"),
                                     ping = c.optBoolean("ping"),
                                     connectionId = c.optString("connectionId").takeIf { it.isNotBlank() },
+                                    elevated = c.optBoolean("elevated"),
                                 )
                             },
                     )
@@ -223,6 +250,8 @@ internal fun decodeState(json: String): AppState =
                 runCatching { HeroStyle.valueOf(root.optString("heroStyle")) }
                     .getOrDefault(HeroStyle.BANNER),
             tile = root.optJSONObject("tile")?.toRef(),
+            shortPin = root.optString("shortPin"),
+            longPin = root.optString("longPin"),
         )
     }.getOrDefault(AppState())
 

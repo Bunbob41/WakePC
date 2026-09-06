@@ -24,6 +24,13 @@ Two halves:
   **connection** per Pi, then define **machines** whose buttons are chosen from
   the commands that connection actually offers.
 
+## Documentation
+
+- **[docs/FIELD-GUIDE.md](docs/FIELD-GUIDE.md)** — what every piece is and how
+  they fit together, in plain language with diagrams. Start here.
+- **[docs/ENGINEERING.md](docs/ENGINEERING.md)** — the engineering record:
+  system diagram, the log of design decisions and why, open debts.
+
 ## Why this architecture
 
 A WOL magic packet is a LAN broadcast — nothing outside the home network can

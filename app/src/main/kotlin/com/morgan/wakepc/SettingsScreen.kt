@@ -37,6 +37,7 @@ fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf<String?>(null) } // "hero" | "tile"
+    var settingPin by remember { mutableStateOf<Int?>(null) } // 4 or 6
 
     fun describe(ref: ButtonRef?): String {
         val resolved = state.resolve(ref) ?: return "not set"
@@ -91,6 +92,18 @@ fun SettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionLabel("CONFIRMATION CODES")
+                SettingsRow(
+                    if (state.shortPin.isBlank()) "not set" else "•".repeat(state.shortPin.length),
+                    "asked before an ordinary command runs",
+                ) { settingPin = SHORT_PIN_LENGTH }
+                SettingsRow(
+                    if (state.longPin.isBlank()) "not set" else "•".repeat(state.longPin.length),
+                    "asked before shutdown, restart or sleep",
+                ) { settingPin = LONG_PIN_LENGTH }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionLabel("CONNECTIONS")
                 state.connections.forEach { conn ->
                     Row(
@@ -132,6 +145,23 @@ fun SettingsScreen(
                 color = Palette.faint,
             )
         }
+    }
+
+    settingPin?.let { length ->
+        PinEntry(
+            title = if (length == LONG_PIN_LENGTH) "SET LONG CODE" else "SET SHORT CODE",
+            subtitle = "$length digits",
+            length = length,
+            onDismiss = { settingPin = null },
+            onEntered = { code ->
+                settingPin = null
+                scope.launch {
+                    store.update {
+                        if (length == LONG_PIN_LENGTH) it.copy(longPin = code) else it.copy(shortPin = code)
+                    }
+                }
+            },
+        )
     }
 
     if (picking != null) {
@@ -202,3 +232,7 @@ private fun SettingsRow(
         TintedIcon(R.drawable.ic_chevron, Palette.faint, size = 14.dp)
     }
 }
+
+/** Short code for ordinary commands, long code for the disruptive ones. */
+const val SHORT_PIN_LENGTH = 4
+const val LONG_PIN_LENGTH = 6

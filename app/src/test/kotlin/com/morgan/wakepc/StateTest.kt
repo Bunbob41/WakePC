@@ -1,6 +1,7 @@
 package com.morgan.wakepc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -128,5 +129,51 @@ class StateTest {
         assertNotNull(resolved)
         assertEquals("my pi", resolved!!.connection.name)
         assertEquals("wake-pc", resolved.command.name)
+    }
+
+    @Test
+    fun `an ordinary command asks for the short code and a disruptive one the long code`() {
+        val s =
+            state.copy(
+                shortPin = "1234",
+                longPin = "246810",
+                machines =
+                    listOf(
+                        machine.copy(
+                            commands =
+                                listOf(
+                                    CommandRef("wake-pc", ping = true),
+                                    CommandRef("shutdown-pc", ping = false, elevated = true),
+                                ),
+                        ),
+                    ),
+            )
+        assertEquals("1234", s.gateFor(s.machines[0].commands[0]))
+        assertEquals("246810", s.gateFor(s.machines[0].commands[1]))
+    }
+
+    /** Before the codes are set the app must keep working, not lock itself. */
+    @Test
+    fun `with no codes set nothing is gated`() {
+        assertEquals("", state.gateFor(CommandRef("wake-pc", ping = true)))
+        assertEquals("", state.gateFor(CommandRef("shutdown-pc", ping = false, elevated = true)))
+    }
+
+    @Test
+    fun `commands that disrupt a running machine are recognised by name`() {
+        listOf("shutdown-pc", "shut down", "restart-pc", "reboot-pi", "sleep-pc", "suspend", "logoff")
+            .forEach { assertTrue(it, looksDisruptive(it)) }
+        listOf("wake-pc", "status", "ping", "lock-pc").forEach { assertFalse(it, looksDisruptive(it)) }
+    }
+
+    @Test
+    fun `codes and elevation survive the round trip`() {
+        val s =
+            state.copy(
+                shortPin = "1234",
+                longPin = "246810",
+                machines = listOf(machine.copy(commands = listOf(CommandRef("shutdown-pc", false, null, true)))),
+            )
+        assertEquals(s, decodeState(encodeState(s)))
     }
 }

@@ -25,6 +25,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
 import androidx.glance.currentState
@@ -105,6 +106,13 @@ internal fun statusKey(machineId: String) = stringPreferencesKey("status_$machin
 /** What this particular widget instance controls, chosen when it was placed. */
 internal val selectedMachineKey = stringPreferencesKey("selected_machine")
 internal val selectedCommandKey = stringPreferencesKey("selected_command")
+
+/**
+ * A widget cannot ask for a code mid-tap, so it is authorised once when it is
+ * placed: entering the code then is how you grant this widget its one-tap
+ * power. Without it the widget still shows status but refuses to run.
+ */
+internal val authorisedKey = stringPreferencesKey("authorised")
 
 internal val machineIdParam = ActionParameters.Key<String>("machineId")
 internal val commandParam = ActionParameters.Key<String>("command")
@@ -363,7 +371,7 @@ private fun MachineRow(
 private fun statusColor(status: String) =
     when {
         status.startsWith("AWAKE") || status == "OK" -> Palette.green
-        status == "FAILED" -> Palette.red
+        status == "FAILED" || status == "NOT AUTHORISED" -> Palette.red
         status == "ASLEEP" || status.isBlank() -> Palette.faint
         else -> Palette.amber
     }
@@ -390,6 +398,13 @@ class RunAction : ActionCallback {
         val commandName = parameters[commandParam] ?: return
         val state = Store(context.applicationContext).current()
         val target = state.resolve(ButtonRef(machineId, commandName)) ?: return
+
+        // Authorised at placement, never mid-tap: a widget has no way to ask.
+        val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId)
+        if (state.gateFor(target.command).isNotBlank() && prefs[authorisedKey] != "yes") {
+            setStatus(context, glanceId, machineId, "NOT AUTHORISED")
+            return
+        }
 
         setStatus(context, glanceId, machineId, "SENDING")
         when {

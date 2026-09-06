@@ -85,6 +85,8 @@ class WidgetConfigActivity : ComponentActivity() {
             updateAppWidgetState(this@WidgetConfigActivity, glanceId) { prefs ->
                 prefs[selectedMachineKey] = machineId
                 prefs[selectedCommandKey] = command
+                // Reaching here means the code was entered, or none was set.
+                prefs[authorisedKey] = "yes"
             }
             WakeWidget().update(this@WidgetConfigActivity, glanceId)
             setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId))
@@ -99,8 +101,23 @@ private fun ChooseButton(
     onPick: (machineId: String, command: String) -> Unit,
 ) {
     var state by remember { mutableStateOf<AppState?>(null) }
+    var confirming by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     LaunchedEffect(Unit) { state = store.current() }
     val current = state ?: return
+
+    // Entering the code here is the act of granting this widget one-tap power.
+    confirming?.let { (machineId, command, gate) ->
+        PinPrompt(
+            title = "AUTHORISE WIDGET",
+            subtitle = "$command · one tap will run this",
+            expected = gate,
+            onDismiss = { confirming = null },
+            onAccepted = {
+                confirming = null
+                onPick(machineId, command)
+            },
+        )
+    }
 
     Column(
         modifier =
@@ -132,8 +149,14 @@ private fun ChooseButton(
                             .fillMaxWidth()
                             .background(Palette.card, RoundedCornerShape(8.dp))
                             .border(1.dp, Palette.border, RoundedCornerShape(8.dp))
-                            .clickable { onPick(machine.id, command.name) }
-                            .padding(14.dp),
+                            .clickable {
+                                val gate = current.gateFor(command)
+                                if (gate.isBlank()) {
+                                    onPick(machine.id, command.name)
+                                } else {
+                                    confirming = Triple(machine.id, command.name, gate)
+                                }
+                            }.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(

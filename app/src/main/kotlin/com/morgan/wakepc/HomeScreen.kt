@@ -25,6 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,7 +55,24 @@ fun HomeScreen(
     val runtime by vm.runtime.collectAsState()
     val logLines by AppLog.lines.collectAsState()
 
+    // Nothing runs from the app without the confirmation code for that
+    // command; a pending press waits here until the gate is satisfied.
+    var pending by remember { mutableStateOf<Pending?>(null) }
+
     LaunchedEffect(Unit) { vm.startPolling() }
+
+    fun attempt(
+        machine: Machine,
+        command: CommandRef,
+    ) {
+        val connection = state.connectionFor(machine, command) ?: return
+        val gate = state.gateFor(command)
+        if (gate.isBlank()) {
+            vm.run(machine, connection, command)
+        } else {
+            pending = Pending(machine, connection, command, gate)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -90,7 +110,7 @@ fun HomeScreen(
                     awake = if (pingCmd != null) rt.awake else null,
                     avgMs = if (pingCmd != null) rt.avgMs else null,
                     runningCommand = rt.running,
-                    onRun = { cmd -> state.connectionFor(machine, cmd)?.let { vm.run(machine, it, cmd) } },
+                    onRun = { cmd -> attempt(machine, cmd) },
                     onEdit = { onEditMachine(machine.id) },
                     onProbe =
                         pingCmd?.let { cmd ->
@@ -139,11 +159,32 @@ fun HomeScreen(
                 resolved = hero,
                 transient = rt.transient,
                 awake = if (hero.command.ping) rt.awake else null,
-                onRun = { vm.run(hero.machine, hero.connection, hero.command) },
+                onRun = { attempt(hero.machine, hero.command) },
             )
         }
     }
+
+    pending?.let { p ->
+        PinPrompt(
+            title = if (p.command.elevated) "CONFIRM · LONG CODE" else "CONFIRM",
+            subtitle = "${p.command.name} · ${p.machine.name.ifBlank { "unnamed" }}",
+            expected = p.gate,
+            onDismiss = { pending = null },
+            onAccepted = {
+                pending = null
+                vm.run(p.machine, p.connection, p.command)
+            },
+        )
+    }
 }
+
+/** A press waiting on its confirmation code. */
+private data class Pending(
+    val machine: Machine,
+    val connection: Connection,
+    val command: CommandRef,
+    val gate: String,
+)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
