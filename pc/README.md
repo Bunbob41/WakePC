@@ -1,5 +1,11 @@
 # wakepc on Windows
 
+> **You probably do not need this.** It exists so the phone can shut down,
+> restart or sleep the PC — but any remote desktop tool already does that, and
+> a machine you can remote into is already awake. Waking a machine that is off
+> is the only thing WakePC does that nothing else can, and that lives on the
+> Pi. Install this only if you specifically want those buttons on your phone.
+
 The Pi can wake this machine, but it cannot shut it down — only the machine
 itself can do that. So the same service runs here too, and the PC becomes a
 second connection in the app with its own commands.

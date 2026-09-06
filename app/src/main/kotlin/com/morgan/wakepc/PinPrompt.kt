@@ -130,7 +130,12 @@ private fun Key(
     }
 }
 
-/** Lets a caller collect a code without knowing what it will be checked against. */
+/**
+ * Lets a caller collect a code without knowing what it will be checked against.
+ *
+ * [onClear] is offered when a code is already set: a gate you cannot remove is
+ * not optional, and these codes are meant to be.
+ */
 @Composable
 fun PinEntry(
     title: String,
@@ -138,6 +143,7 @@ fun PinEntry(
     length: Int,
     onDismiss: () -> Unit,
     onEntered: (String) -> Unit,
+    onClear: (() -> Unit)? = null,
 ) {
     var entered by remember { mutableStateOf("") }
 
@@ -188,6 +194,13 @@ fun PinEntry(
                     }
                 }
                 Key("del", wide = true) { entered = entered.dropLast(1) }
+            }
+            if (onClear != null) {
+                Box(
+                    modifier = Modifier.clickable(onClick = onClear).padding(6.dp),
+                ) {
+                    ConsoleText("remove this code", size = 11, color = Palette.red)
+                }
             }
         }
     }

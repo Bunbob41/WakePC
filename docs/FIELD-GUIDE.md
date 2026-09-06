@@ -9,8 +9,14 @@ Turning on a PC you are not sitting next to used to mean: open an SSH app on the
 phone, connect to the Raspberry Pi, find a saved snippet, paste it, hope. WakePC
 replaces that with **one tap** — and tells you whether it actually worked.
 
-It has since grown to run other commands too (restart, sleep, lock), on more than
-one machine.
+**That is the whole point, and it is worth being clear about the boundary:** a
+remote desktop tool can already shut down, restart or lock your PC. What it
+cannot do is turn on a machine that is off — you cannot remote into something
+that is not running. Waking is the one thing here that nothing else can do.
+
+The relay can run other commands too, and the Windows half of this project adds
+shutdown/restart/sleep buttons. That half is **optional and not installed** —
+see `pc/README.md` if you ever want it.
 
 ## The one constraint that shapes everything
 
@@ -22,7 +28,8 @@ So *something already at home* has to send it. That is the Pi. Everything else i
 the design follows from this single fact.
 
 The mirror image is also true: only a machine that is **already running** can turn
-itself off. So shutdown does not come from the Pi — it comes from the PC itself.
+itself off. So shutdown cannot come from the Pi — it would have to come from the
+PC itself, which is why that is a separate, optional install.
 
 ```mermaid
 flowchart LR
@@ -114,8 +121,9 @@ flowchart TD
 
 ### Confirmation codes
 
-Buttons that turn machines off should not fire from a pocket. So running a
-command asks for a code first:
+**These are off by default, and a wake-only setup does not need them** — waking
+a machine cannot hurt anything, so a tap just wakes it. Turn one on if you add
+buttons that do something a mis-tap would regret:
 
 - **Short code (4 digits)** — ordinary commands like waking.
 - **Long code (6 digits)** — anything that disrupts a running machine:

@@ -14,9 +14,11 @@ Two halves:
   It also serves a browser control panel at `/`. Callers are identified by
   asking Tailscale who they are, so there is no password to set up. Setup is in
   [pi/README.md](pi/README.md).
-- **`pc/`** — the same service for a Windows machine, so the PC can be shut
-  down, restarted, slept or locked from the phone. The Pi wakes it; the PC
-  does the things only it can do. See [pc/README.md](pc/README.md).
+- **`pc/`** — *optional.* The same service for a Windows machine, so the PC can
+  be shut down, restarted, slept or locked from the phone. Most people do not
+  need this: any remote desktop tool already does all of it, and a machine you
+  can remote into is by definition already awake. Waking is the part nothing
+  else can do. See [pc/README.md](pc/README.md).
 - **The Android app** (`app/`) — Jetpack Compose. The home screen shows a card
   per machine with live status over a configurable hero button; a Quick
   Settings tile fires your chosen command, and a home-screen widget lists your

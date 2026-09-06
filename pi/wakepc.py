@@ -115,11 +115,9 @@ def load_config():
     if confirm_code and not confirm_code.isdigit():
         sys.exit("error: confirm_code must be digits")
     if any(c.confirm for c in commands.values()) and not confirm_code:
-        print(
-            "warning: commands are marked confirm but no confirm_code is set — "
-            "the app's code will be the only thing gating them",
-            file=sys.stderr,
-        )
+        # Normal for a wake-only setup: the app is then the only gate, and
+        # with no code set there is no gate at all. Said once, not as a warning.
+        print("note: no confirm_code set — elevated commands are gated by the app only")
 
     return {
         "token": token,

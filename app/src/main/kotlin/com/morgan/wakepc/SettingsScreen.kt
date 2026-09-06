@@ -92,14 +92,14 @@ fun SettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("CONFIRMATION CODES")
+                SectionLabel("CONFIRMATION CODES · OPTIONAL")
                 SettingsRow(
-                    if (state.shortPin.isBlank()) "not set" else "•".repeat(state.shortPin.length),
-                    "asked before an ordinary command runs",
+                    if (state.shortPin.isBlank()) "off — commands run on one tap" else "•".repeat(state.shortPin.length),
+                    "set one only if you want every command to ask first",
                 ) { settingPin = SHORT_PIN_LENGTH }
                 SettingsRow(
-                    if (state.longPin.isBlank()) "not set" else "•".repeat(state.longPin.length),
-                    "asked before shutdown, restart or sleep",
+                    if (state.longPin.isBlank()) "off" else "•".repeat(state.longPin.length),
+                    "asked before anything that interrupts a running machine",
                 ) { settingPin = LONG_PIN_LENGTH }
             }
 
@@ -148,19 +148,22 @@ fun SettingsScreen(
     }
 
     settingPin?.let { length ->
+        val isLong = length == LONG_PIN_LENGTH
+        val alreadySet = if (isLong) state.longPin.isNotBlank() else state.shortPin.isNotBlank()
+
+        fun save(code: String) {
+            settingPin = null
+            scope.launch {
+                store.update { if (isLong) it.copy(longPin = code) else it.copy(shortPin = code) }
+            }
+        }
         PinEntry(
-            title = if (length == LONG_PIN_LENGTH) "SET LONG CODE" else "SET SHORT CODE",
-            subtitle = "$length digits",
+            title = if (isLong) "LONG CODE" else "SHORT CODE",
+            subtitle = "$length digits · leave it off for one-tap",
             length = length,
             onDismiss = { settingPin = null },
-            onEntered = { code ->
-                settingPin = null
-                scope.launch {
-                    store.update {
-                        if (length == LONG_PIN_LENGTH) it.copy(longPin = code) else it.copy(shortPin = code)
-                    }
-                }
-            },
+            onEntered = ::save,
+            onClear = if (alreadySet) ({ save("") }) else null,
         )
     }
 

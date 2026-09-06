@@ -17,7 +17,7 @@ flowchart TB
     end
     subgraph relays["Relay service (pi/wakepc.py) — same file, two hosts"]
         PI["Raspberry Pi<br/>systemd, user 'wakepc'"]
-        PCS["Windows PC<br/>Startup-folder shim"]
+        PCS["Windows PC — OPTIONAL<br/>not installed by default"]
     end
     PC["Desk PC hardware"]
     UI --> VM --> API
@@ -47,6 +47,41 @@ can never supply a shell string.
 ## Decision log
 
 Newest first. Each entry: the decision, why, and what it replaced.
+
+### Scope correction: the PC relay is optional, the code gate is off by default — 0.13.0
+
+Stripped back. The Windows relay is uninstalled from the user's PC, `pc/` is
+documented as an optional extra rather than one of two halves, confirmation
+codes default to off and can now be **removed** once set, and the relay no
+longer treats "no confirm_code" as a warning.
+
+*Why:* the user pointed out they had never once used shutdown from the phone —
+they have four remote desktop tools that do it. The asymmetry they named is the
+right frame for this project: **remote desktop cannot wake a machine that is
+off.** That is the only capability WakePC has that nothing else does. Shutdown
+duplicated tools that already existed.
+
+The cost of having built it was not small: five of the last eight feature
+commits traced back to shutdown (Windows relay, boot-time install, multiple
+relays per machine, both confirmation-code releases), 9 of 16 app source files
+touched `elevated`/`confirmCode`/`connectionId`, and the Windows side generated
+its own tail of bugs — Task Scheduler refusing user tasks, `pythonw` having no
+stdout, PowerShell's BOM, and a boot-startup install that turned out never to
+have been in place.
+
+*Process note, worth more than the code change:* the user floated shutdown as
+speculation ("theoretically we could"), then rejected a design and said "park
+it." It was re-raised later with a different design and accepted. The lesson is
+that "theoretically we could" is not a request, and a parked idea should stay
+parked until the user brings it back.
+
+*What was kept, because it earned its place on wake alone:* tailnet identity
+(no token, one field to set up) and the R8/icon/widget fixes. Multi-connection
+machines stay too — harmless, and general.
+
+*What is NOT removed:* `pc/` stays in the repo, tested and documented. The cost
+was never lines in git; it was a service listening on the user's main machine
+for a feature they did not want. `pc/install.ps1` puts it back in one command.
 
 ### Tailnet identity replaces the token; the code gets teeth — 0.12.0
 
@@ -232,9 +267,13 @@ widgets.
   of removing the widget.
 - **`tailscale whois` shells out per request** (cached 5 minutes). Fine at this
   scale; the local API over the unix socket would avoid the process spawn.
-- **The PC has no SYSTEM service.** The elevated install was believed to have
-  worked in an earlier session; it had left no task and no shortcut, and the
-  relay simply would not have come back after a reboot. It now autostarts from
-  the Startup folder (user session), which means it only runs once someone logs
-  in. A SYSTEM task, installed elevated, is still the better answer and is
-  **untested by an actual reboot**.
+- **The PC relay is uninstalled** (0.13.0), so its boot-startup question is moot
+  unless someone reinstalls it. If they do: the elevated SYSTEM-task path is
+  still **unproven by an actual reboot**, and the unelevated Startup-folder path
+  only runs after a user logs in.
+- **The user's real confirmation codes were committed** in 0.11.0's `StateTest`
+  and pushed to the public repo. Scrubbed from the working tree in 0.13.0; the
+  history still carries them at `72fbe2a` unless rewritten. The codes should be
+  treated as burned regardless — a public repo may already be cloned or cached.
+  Placeholders only, and the leak scan must run over `git grep` across tracked
+  files, not just the staged diff, which is how this was missed.
