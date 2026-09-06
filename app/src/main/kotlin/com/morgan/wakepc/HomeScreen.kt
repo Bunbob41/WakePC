@@ -8,6 +8,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -143,7 +145,7 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun MachineCard(
     machine: Machine,
@@ -207,9 +209,13 @@ private fun MachineCard(
             color = Palette.faint,
             modifier = Modifier.padding(start = 26.dp, top = 2.dp),
         )
-        Row(
-            modifier = Modifier.padding(top = 14.dp),
+        // A machine can draw commands from several relays, so this has to wrap:
+        // in a plain Row the last chip is squeezed to nothing and its label
+        // wraps one character per line.
+        FlowRow(
+            modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             machine.commands.forEach { cmd ->
                 val isRunning = runningCommand == cmd.name
@@ -223,7 +229,12 @@ private fun MachineCard(
                             ).clickable { onRun(cmd) }
                             .padding(horizontal = 18.dp, vertical = 10.dp),
                 ) {
-                    ConsoleText(cmd.name, size = 12, color = if (isRunning) Palette.amber else Palette.sub)
+                    ConsoleText(
+                        cmd.name,
+                        size = 12,
+                        color = if (isRunning) Palette.amber else Palette.sub,
+                        maxLines = 1,
+                    )
                 }
             }
         }
