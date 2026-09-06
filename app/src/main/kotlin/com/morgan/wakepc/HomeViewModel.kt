@@ -73,16 +73,25 @@ class HomeViewModel(
         }
     }
 
+    /**
+     * [confirmCode] is forwarded to the relay for commands it marked elevated:
+     * the relay checks it too, so the gate is not just this app's good manners.
+     */
     fun run(
         machine: Machine,
         connection: Connection,
         command: CommandRef,
+        confirmCode: String = "",
     ) {
         if (_runtime.value[machine.id]?.running != null) return
         viewModelScope.launch {
             update(machine.id) { it.copy(running = command.name) }
             try {
-                if (command.ping) runWithWake(machine, connection, command) else runFireAndForget(machine, connection, command)
+                if (command.ping) {
+                    runWithWake(machine, connection, command, confirmCode)
+                } else {
+                    runFireAndForget(machine, connection, command, confirmCode)
+                }
             } finally {
                 update(machine.id) { it.copy(running = null) }
             }
@@ -93,9 +102,10 @@ class HomeViewModel(
         machine: Machine,
         connection: Connection,
         command: CommandRef,
+        confirmCode: String,
     ) {
         setTransient(machine.id, "WAKING · 0:00", Tone.ACTIVE, pulse = true, glow = true)
-        if (api.run(connection, command.name).isFailure) {
+        if (api.run(connection, command.name, confirmCode).isFailure) {
             flash(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false, holdMs = 3_000)
             return
         }
@@ -116,9 +126,10 @@ class HomeViewModel(
         machine: Machine,
         connection: Connection,
         command: CommandRef,
+        confirmCode: String,
     ) {
         setTransient(machine.id, "RUNNING", Tone.ACTIVE, pulse = true, glow = true)
-        val ok = api.run(connection, command.name).isSuccess
+        val ok = api.run(connection, command.name, confirmCode).isSuccess
         flash(machine.id, if (ok) "OK" else "FAILED", if (ok) Tone.GOOD else Tone.BAD, glow = ok, holdMs = 2_500)
     }
 

@@ -17,15 +17,15 @@ flowchart TB
     end
     subgraph relays["Relay service (pi/wakepc.py) — same file, two hosts"]
         PI["Raspberry Pi<br/>systemd, user 'wakepc'"]
-        PCS["Windows PC<br/>SYSTEM scheduled task"]
+        PCS["Windows PC<br/>Startup-folder shim"]
     end
     PC["Desk PC hardware"]
     UI --> VM --> API
     W --> API
     TILE --> API
     VM <--> STORE
-    API -- "HTTP over Tailscale" --> PI
-    API -- "HTTP over Tailscale" --> PCS
+    API -- "HTTP over Tailscale<br/>identified by whois" --> PI
+    API -- "HTTP over Tailscale<br/>+ confirm code" --> PCS
     PI -- "UDP magic packet (LAN broadcast)" --> PC
     PI -- "ICMP ping (status)" --> PC
     PCS -- "shutdown /s /r, rundll32 sleep" --> PC
@@ -38,13 +38,60 @@ Glance `ActionCallback` has no lifecycle to host one.
 
 **Wire protocol** (`pi/wakepc.py`): `GET /commands`, `POST /run/<name>`,
 `GET /status/<name>?count=N`, legacy `/wake` + `/status`, plus `/` (HTML panel)
-and `/qr.png`. Auth is a bearer token; 8 failures in 5 minutes locks the caller
-out. Commands are *named entries in the relay's own config* — the client can
-never supply a shell string.
+and `/qr.png`. Callers are identified by `tailscale whois` on the source
+address; a bearer token is the fallback. Commands the relay marks `elevated`
+additionally require `X-WakePC-Confirm`. 8 failures in 5 minutes locks the
+caller out. Commands are *named entries in the relay's own config* — the client
+can never supply a shell string.
 
 ## Decision log
 
 Newest first. Each entry: the decision, why, and what it replaced.
+
+### Tailnet identity replaces the token; the code gets teeth — 0.12.0
+
+The relay now calls `tailscale whois` on the source address of each request.
+WireGuard has already proved that address belongs to that peer's key, so it is
+not forgeable, and tailscaled will name the node and the account behind it.
+A recognised device therefore needs **no credential at all**.
+
+*Why:* 0.11.0 made the relay token equal to the 4-digit PIN, which quietly cut
+the relay credential from a ~60-bit passphrase to 10,000 possibilities. The
+lockout slows that to roughly 2,300 guesses a day — days, not centuries. The
+alternative was to keep a long token and make enrolment easier, but the honest
+observation was that a token was never the right shape: the tailnet already
+knows who you are, and asking the user to carry a secret across devices was
+solving a problem Tailscale had solved. **Replaced:** mandatory `token`,
+QR-based enrolment as the primary path, and the panel's unlock screen.
+
+`token` still exists as a fallback for a host with no tailscale CLI, and must
+now be at least 8 characters — it is no longer allowed to be a PIN.
+
+*Anti-spoofing:* `bind_host = auto` binds to this host's own tailnet address,
+so a LAN host cannot even open a connection claiming to be a peer. Source
+addresses are also range-checked against Tailscale's CGNAT and ULA ranges.
+`allow_users` narrows further, to named tailnet accounts.
+
+### `elevated` is decided by the relay, and the code is enforced there — 0.12.0
+
+`/commands` now returns `elevated` per command, derived from what the command
+actually runs, and `/run/<name>` requires `X-WakePC-Confirm` for those.
+
+*Why:* two separate holes in 0.11.0. First, `looksDisruptive()` was a regex over
+a *nickname* — a command called `goodnight` that ran `shutdown /s` got the short
+code, so the default failed open. The relay is the only party that knows the
+command line, so it decides; the client only guesses for older relays that do
+not report the field. Second, the code was checked purely client-side, so
+anything that could reach the relay could shut the machine down without ever
+seeing it. Now the relay checks it too, and bad attempts count toward the same
+lockout.
+
+The Quick Settings tile cannot show a keypad and, unlike a widget, was never
+authorised at placement — so an elevated command from the tile opens the app to
+be confirmed properly.
+
+*Debt kept deliberately:* an authorised widget stores the code, because it must
+present it to the relay. Placing the widget is the consent for exactly that.
 
 ### Confirmation codes replace the "token" as the user-facing gate — 0.11.0
 
@@ -66,9 +113,9 @@ thing the user types serve the purpose they actually cared about. **Superseded:*
 `NOT AUTHORISED` when a gate exists and the flag is absent. This is a deliberate
 trade: placing a widget *is* the act of consent.
 
-*Debt:* the codes are stored in cleartext in DataStore, and the relay token is
-now literally the PIN. Acceptable only because the whole surface is inside a
-tailnet; see **Open questions**.
+*Debt, since corrected:* this release also set the relay token equal to the PIN,
+collapsing a credential and a confirmation into one weak secret. That was a
+regression, and 0.12.0 undoes it by removing the token entirely.
 
 ### One card per machine, commands from several relays — 0.10.0
 
@@ -176,14 +223,18 @@ widgets.
 
 ## Open questions and debts
 
-- **Codes are stored in cleartext** and double as the relay bearer token. If this
-  ever leaves the tailnet, that has to change (Keystore, or a token distinct from
-  the confirmation code).
+- **Codes are stored in cleartext** in DataStore, and an authorised widget stores
+  one too. Inside a tailnet this is a confirmation, not a credential — but if
+  the relay is ever reachable from outside, it needs Keystore.
 - **No lockout on the app-side prompt** — the relay throttles, the dialog does
-  not.
+  not. Matters less now the relay enforces elevated commands itself.
 - **Widget authorisation is per instance and permanent.** No way to revoke short
   of removing the widget.
-- **The PC's SYSTEM service cannot be restarted unelevated**, so a token change
-  currently means either an elevated shell or a reboot.
-- Boot-time SYSTEM startup on the PC is installed but **not yet proven by an
-  actual reboot**.
+- **`tailscale whois` shells out per request** (cached 5 minutes). Fine at this
+  scale; the local API over the unix socket would avoid the process spawn.
+- **The PC has no SYSTEM service.** The elevated install was believed to have
+  worked in an earlier session; it had left no task and no shortcut, and the
+  relay simply would not have come back after a reboot. It now autostarts from
+  the Startup folder (user session), which means it only runs once someone logs
+  in. A SYSTEM task, installed elevated, is still the better answer and is
+  **untested by an actual reboot**.

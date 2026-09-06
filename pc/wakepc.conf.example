@@ -1,9 +1,17 @@
 # Windows side of WakePC. The Pi wakes this machine; this service does the
 # things only the machine itself can do.
 [wakepc]
-token = REPLACE_ME
-# The PC's own Tailscale IP, so nothing off the tailnet can reach it.
-bind_host = 100.x.y.z
+# Devices on your tailnet are identified by `tailscale whois` and need no
+# credential. See pi/wakepc.conf.example for the full set of options.
+trust_tailnet = yes
+
+# Every command here interrupts a machine somebody may be sitting at, so they
+# all default to requiring the confirmation code. Set it to the long code you
+# use in the app and the relay will check it too.
+# confirm_code = 000000
+
+# "auto" binds to this PC's own Tailscale address.
+bind_host = auto
 port = 8787
 
 # /t 5 matters: shutdown returns immediately and the HTTP response gets out

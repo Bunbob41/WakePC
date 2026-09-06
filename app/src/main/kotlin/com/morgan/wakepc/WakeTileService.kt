@@ -38,6 +38,14 @@ class WakeTileService : TileService() {
                 openApp()
                 return@launch
             }
+            // The tile cannot show a keypad, and unlike a widget it was never
+            // authorised at placement. Hand an elevated command to the app,
+            // which can ask properly.
+            if (target.command.elevated) {
+                updateTile(subtitle = "Confirm in the app", state = Tile.STATE_INACTIVE)
+                openApp()
+                return@launch
+            }
 
             updateTile(subtitle = "Running…", state = Tile.STATE_ACTIVE)
             if (WakeApi.run(target.connection, target.command.name).isFailure) {

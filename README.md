@@ -11,8 +11,8 @@ Two halves:
   named commands defined in `/etc/wakepc.conf`: `GET /commands` lists them,
   `POST /run/<name>` runs one (a Wake-on-LAN magic packet or a shell command),
   and `GET /status/<name>?count=N` pings a target and reports up/down plus rtt.
-  It also serves a browser control panel at `/`. Everything is behind a bearer
-  token (a PIN or passphrase) with a brute-force lockout. Setup is in
+  It also serves a browser control panel at `/`. Callers are identified by
+  asking Tailscale who they are, so there is no password to set up. Setup is in
   [pi/README.md](pi/README.md).
 - **`pc/`** — the same service for a Windows machine, so the PC can be shut
   down, restarted, slept or locked from the phone. The Pi wakes it; the PC
@@ -35,9 +35,12 @@ Two halves:
 
 A WOL magic packet is a LAN broadcast — nothing outside the home network can
 deliver it, so the Pi acts as the relay. Tailscale provides the authenticated,
-encrypted path with no port forwarding; the token is defense in depth on top of
-tailnet membership. The phone can only invoke commands the server defines *by
-name* — it can never send shell across the wire.
+encrypted path with no port forwarding, and — because a tailnet address is
+bound to a device's key and cannot be forged — it also answers *who is calling*.
+The relay asks tailscaled exactly that, so a device you already trust needs no
+credential. The phone can only invoke commands the server defines *by name* — it
+can never send shell across the wire. Commands that interrupt a running machine
+additionally require a confirmation code, checked by the relay itself.
 
 ## Phone setup
 
@@ -46,8 +49,8 @@ name* — it can never send shell across the wire.
    [latest release](https://github.com/Bunbob41/WakePC/releases/latest) on your
    phone and open it (Android will ask you to allow installs from your browser
    the first time). Or build it yourself — see Development below.
-3. Open WakePC and add a connection: name it, enter the Pi's address, and the
-   token. "Scan setup qr" against the Pi panel does this without typing.
+3. Open WakePC and add a connection: name it and enter the Pi's address. Leave
+   the token empty — the relay recognises your phone by its tailnet identity.
 
    A short MagicDNS name (`mypi`), the full name (`mypi.tailnet.ts.net`) or
    the Tailscale IP all work — scheme and port are filled in for you. Android

@@ -2,10 +2,17 @@
 """Named-command relay for the tailnet.
 
 Commands are defined server-side in /etc/wakepc.conf — the phone can only
-invoke them by name, never send shell. Endpoints (all bearer-token auth):
+invoke them by name, never send shell.
 
-    GET  /commands       -> {"commands": [{"name": "wake-pc", "ping": true}]}
-    POST /run/<name>     -> run that command
+Callers are identified by asking tailscaled who owns the source address
+(`tailscale whois`), so a device you already trust on the tailnet needs no
+credential at all. A bearer token remains as a fallback for hosts without
+the tailscale CLI. Endpoints:
+
+    GET  /commands       -> {"commands": [{"name": "wake-pc", "ping": true,
+                                           "elevated": false}]}
+    POST /run/<name>     -> run that command; commands marked `confirm` also
+                            require the header X-WakePC-Confirm: <code>
     GET  /status/<name>  -> {"awake": bool} for commands that define a ping ip
 
     POST /wake, GET /status: legacy 0.1 endpoints, mapped onto the first
@@ -15,7 +22,9 @@ Stdlib only — no pip installs. See wakepc.conf.example for the config format.
 """
 
 import configparser
+import ipaddress
 import json
+import os
 import re
 import secrets
 import shutil
@@ -27,16 +36,33 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CONFIG_PATH = "/etc/wakepc.conf"
+# Windows keeps its config beside the service rather than in /etc; the
+# installer points here with WAKEPC_CONFIG instead of patching the source.
+CONFIG_PATH = os.environ.get("WAKEPC_CONFIG", "/etc/wakepc.conf")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+# The ranges Tailscale hands out. An address outside them was never a peer.
+TAILNET_NETS = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("fd7a:115c:a1e0::/48"),
+)
+
+# Commands that interrupt a machine somebody may be using. Used only to pick
+# a default for `confirm` — fail safe, so an unrecognised shell command is
+# treated as disruptive and the config can relax it.
+DISRUPTIVE_RE = re.compile(
+    r"shut ?down|restart|reboot|sleep|suspend|hibernate|logoff|log ?out|poweroff",
+    re.IGNORECASE,
+)
 
 
 class Command:
-    def __init__(self, name, run, ping, broadcast_ip):
+    def __init__(self, name, run, ping, broadcast_ip, confirm):
         self.name = name
         self.run = run  # ("wol", mac) or ("shell", cmdline)
         self.ping = ping
         self.broadcast_ip = broadcast_ip
+        self.confirm = confirm  # needs the confirmation code as well as identity
 
 
 def load_config():
@@ -46,9 +72,16 @@ def load_config():
     if not parser.read(CONFIG_PATH, encoding="utf-8-sig"):
         sys.exit(f"error: could not read {CONFIG_PATH}")
     main = parser["wakepc"]
+    trust_tailnet = main.getboolean("trust_tailnet", True)
     token = main.get("token", "")
-    if len(token) < 4:
-        sys.exit("error: token must be at least 4 characters (a PIN, or: wakepc.py genpass)")
+    if token and len(token) < 8:
+        sys.exit("error: a token must be at least 8 characters (wakepc.py genpass)")
+    if not token and not trust_tailnet:
+        sys.exit("error: set a token, or leave trust_tailnet on so peers are identified")
+    allow_users = {
+        u.strip().lower() for u in main.get("allow_users", "").split(",") if u.strip()
+    }
+    confirm_code = main.get("confirm_code", "").strip()
 
     commands = {}
     for section in parser.sections():
@@ -67,21 +100,113 @@ def load_config():
             run = ("shell", raw[6:].strip())
         else:
             sys.exit(f"error: [{section}] run must start with 'WOL ' or 'shell '")
+        # A WOL packet can only ever turn something on, so it is never
+        # disruptive; anything else is, until the config says otherwise.
+        default_confirm = run[0] == "shell" and bool(DISRUPTIVE_RE.search(raw))
         commands[name] = Command(
             name=name,
             run=run,
             ping=parser[section].get("ping", "").strip() or None,
             broadcast_ip=parser[section].get("broadcast_ip", "255.255.255.255"),
+            confirm=parser[section].getboolean("confirm", default_confirm),
         )
     if not commands:
         sys.exit("error: no [command:*] sections defined")
+    if confirm_code and not confirm_code.isdigit():
+        sys.exit("error: confirm_code must be digits")
+    if any(c.confirm for c in commands.values()) and not confirm_code:
+        print(
+            "warning: commands are marked confirm but no confirm_code is set — "
+            "the app's code will be the only thing gating them",
+            file=sys.stderr,
+        )
 
     return {
         "token": token,
-        "bind_host": main.get("bind_host", "0.0.0.0"),
+        "trust_tailnet": trust_tailnet,
+        "allow_users": allow_users,
+        "confirm_code": confirm_code,
+        "bind_host": main.get("bind_host", "auto"),
         "port": main.getint("port", 8787),
         "commands": commands,
     }
+
+
+def tailscale_bin():
+    """The tailscale CLI, or None if this host has not got one."""
+    found = shutil.which("tailscale")
+    if found:
+        return found
+    for guess in (
+        r"C:\Program Files\Tailscale\tailscale.exe",
+        "/usr/bin/tailscale",
+        "/usr/local/bin/tailscale",
+        "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+    ):
+        if os.path.exists(guess):
+            return guess
+    return None
+
+
+def _tailscale(*args, timeout=5):
+    binary = tailscale_bin()
+    if binary is None:
+        return None
+    try:
+        done = subprocess.run([binary, *args], capture_output=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def own_tailnet_addr():
+    """This host's own tailnet address, for binding and for the QR."""
+    out = _tailscale("ip", "-4")
+    if not out:
+        return None
+    first = out.decode(errors="replace").strip().splitlines()
+    return first[0].strip() if first else None
+
+
+def own_login():
+    """The tailnet account this node belongs to — the default allowed user."""
+    addr = own_tailnet_addr()
+    identity = whois_peer(addr) if addr else None
+    return identity[0] if identity else None
+
+
+_whois_lock = threading.Lock()
+_whois_cache = {}
+WHOIS_TTL = 300
+
+
+def whois_peer(ip: str):
+    """Ask tailscaled who owns `ip`. Returns (login, node name), or None.
+
+    This is the whole authentication story: WireGuard has already proved the
+    packet came from that peer's key, so the address is not forgeable and
+    tailscaled can name its owner. Cached, since it shells out.
+    """
+    now = time.time()
+    with _whois_lock:
+        cached = _whois_cache.get(ip)
+        if cached and now - cached[0] < WHOIS_TTL:
+            return cached[1]
+    identity = None
+    raw = _tailscale("whois", "--json", f"{ip}:0")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            node = parsed.get("Node") or {}
+            identity = (
+                (parsed.get("UserProfile") or {}).get("LoginName", ""),
+                node.get("ComputedName") or node.get("Name", "").rstrip("."),
+            )
+        except (ValueError, AttributeError):
+            identity = None
+    with _whois_lock:
+        _whois_cache[ip] = (now, identity)
+    return identity
 
 
 def send_magic_packet(mac_hex: str, broadcast_ip: str) -> None:
@@ -157,26 +282,71 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    # Short tokens (PINs) are only sane with a guess limit: after 8 bad
-    # attempts in 5 minutes, auth rejects everything until the window clears.
+    # A confirmation code is short by design, so guessing has to be capped:
+    # after 8 bad attempts in 5 minutes everything is refused until the
+    # window clears. Also covers the fallback token.
     _auth_lock = threading.Lock()
     _auth_failures = []
 
-    def _authorized(self) -> bool:
-        supplied = self.headers.get("Authorization", "")
-        expected = f"Bearer {self.config['token']}"
+    def _locked_out(self) -> bool:
+        now = time.time()
         with Handler._auth_lock:
-            now = time.time()
             Handler._auth_failures[:] = [t for t in Handler._auth_failures if now - t < 300]
-            if len(Handler._auth_failures) >= 8:
-                print(f"auth locked out ({self.address_string()})", flush=True)
-                return False
-            if supplied == expected:
-                return True
-            if supplied:
-                Handler._auth_failures.append(now)
-                print(f"auth failure from {self.address_string()}", flush=True)
+            return len(Handler._auth_failures) >= 8
+
+    def _record_failure(self, what: str) -> None:
+        with Handler._auth_lock:
+            Handler._auth_failures.append(time.time())
+        print(f"{what} failure from {self.address_string()}", flush=True)
+
+    def _peer(self):
+        """The tailnet identity behind this request, if we can establish one."""
+        if not self.config["trust_tailnet"]:
+            return None
+        try:
+            addr = ipaddress.ip_address(self.client_address[0])
+        except ValueError:
+            return None
+        if not any(addr in net for net in TAILNET_NETS):
+            return None
+        identity = whois_peer(self.client_address[0])
+        if identity is None:
+            return None
+        allowed = self.config["allow_users"]
+        if allowed and identity[0].lower() not in allowed:
+            print(f"refused {identity[0]} ({identity[1]}) — not in allow_users", flush=True)
+            return None
+        return identity
+
+    def _authorized(self) -> bool:
+        if self._locked_out():
+            print(f"auth locked out ({self.address_string()})", flush=True)
             return False
+        if self._peer() is not None:
+            return True
+        token = self.config["token"]
+        supplied = self.headers.get("Authorization", "")
+        if token and supplied == f"Bearer {token}":
+            return True
+        if supplied:
+            self._record_failure("auth")
+        return False
+
+    def _confirmed(self, cmd) -> bool:
+        """Commands that interrupt a running machine need the code as well.
+
+        Identity says who is asking; this says they meant it. Without it a
+        borrowed unlocked phone could shut the machine down in one tap.
+        """
+        if not cmd.confirm:
+            return True
+        expected = self.config["confirm_code"]
+        if not expected:
+            return True  # nothing to check against; the app is the only gate
+        if secrets.compare_digest(self.headers.get("X-WakePC-Confirm", ""), expected):
+            return True
+        self._record_failure("confirm")
+        return False
 
     def _command(self, name):
         return self.config["commands"].get(name)
@@ -208,11 +378,18 @@ class Handler(BaseHTTPRequestHandler):
             ).stdout
             return self._reply_raw(200, "image/png", png)
         if parsed.path == "/commands":
+            # `elevated` is decided here, not guessed by the client: this is
+            # the only place that knows a command actually runs `shutdown`.
             listing = [
-                {"name": c.name, "ping": c.ping is not None}
+                {"name": c.name, "ping": c.ping is not None, "elevated": c.confirm}
                 for c in self.config["commands"].values()
             ]
-            return self._reply(200, {"commands": listing})
+            identity = self._peer()
+            return self._reply(200, {
+                "commands": listing,
+                "you": identity[1] if identity else None,
+                "confirm_enforced": bool(self.config["confirm_code"]),
+            })
         if parsed.path.startswith("/status/"):
             cmd = self._command(parsed.path[len("/status/"):])
             if cmd is None:
@@ -234,6 +411,8 @@ class Handler(BaseHTTPRequestHandler):
             cmd = self._command(self.path[len("/run/"):])
             if cmd is None:
                 return self._reply(404, {"error": "unknown command"})
+            if not self._confirmed(cmd):
+                return self._reply(403, {"error": "confirmation code required"})
             try:
                 return self._reply(200, run_command(cmd))
             except (OSError, subprocess.TimeoutExpired) as exc:
@@ -288,15 +467,17 @@ PANEL_HTML = """<!doctype html>
   <div class="label">SETUP QR</div>
   <button onclick="showQr()">show setup qr</button>
   <img id="qrimg" alt="setup qr">
-  <p class="hint">scan from the phone app: add connection &#8594; scan setup qr.
-     the qr contains the token &#8212; only show it to screens you trust.</p>
-  <p class="hint"><a href="#" style="color:#5f6871" onclick="localStorage.removeItem('wakepc_token');location.reload();return false">forget token on this browser</a></p>
+  <p class="hint" id="who">scan from the phone app: add connection &#8594; scan setup qr.</p>
 </div>
 <script>
 let token = localStorage.getItem('wakepc_token') || '';
+let enforced = false;
 const $ = (id) => document.getElementById(id);
-const api = (path, opts = {}) =>
-  fetch(path, { ...opts, headers: { Authorization: 'Bearer ' + token } });
+const api = (path, opts = {}) => {
+  const headers = { ...(opts.headers || {}) };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  return fetch(path, { ...opts, headers });
+};
 
 function saveTok() {
   token = $('tok').value.trim();
@@ -305,22 +486,25 @@ function saveTok() {
 }
 
 async function init() {
-  if (!token) { $('login').style.display = 'block'; return; }
+  // Try with no credential at all: on the tailnet the relay already knows
+  // who we are, and only falls back to asking for a token if it does not.
   const res = await api('/commands');
   if (res.status === 401) {
     localStorage.removeItem('wakepc_token'); token = '';
     $('panel').style.display = 'none'; $('login').style.display = 'block';
     return;
   }
-  const { commands } = await res.json();
+  const info = await res.json();
+  enforced = info.confirm_enforced;
   $('login').style.display = 'none'; $('panel').style.display = 'block';
-  $('cmds').innerHTML = commands.map((c) => `
+  if (info.you) $('who').textContent = 'recognised as ' + info.you + ' — no token needed here.';
+  $('cmds').innerHTML = info.commands.map((c) => `
     <div class="row">
-      <div class="name">${c.name}</div>
+      <div class="name">${c.name}${c.elevated ? ' <span style="color:#5f6871">· code</span>' : ''}</div>
       <div class="status" id="st-${c.name}"></div>
-      <button onclick="run('${c.name}', ${c.ping})">run</button>
+      <button onclick="run('${c.name}', ${c.ping}, ${c.elevated})">run</button>
     </div>`).join('');
-  commands.filter((c) => c.ping).forEach((c) => refresh(c.name));
+  info.commands.filter((c) => c.ping).forEach((c) => refresh(c.name));
 }
 
 async function refresh(name) {
@@ -332,10 +516,17 @@ async function refresh(name) {
   } catch (e) { /* leave blank */ }
 }
 
-async function run(name, ping) {
+async function run(name, ping, elevated) {
   const el = $('st-' + name);
+  const headers = {};
+  if (elevated && enforced) {
+    const code = prompt('confirmation code for ' + name);
+    if (!code) return;
+    headers['X-WakePC-Confirm'] = code.trim();
+  }
   el.className = 'status busy'; el.textContent = 'RUNNING';
-  const res = await api('/run/' + name, { method: 'POST' });
+  const res = await api('/run/' + name, { method: 'POST', headers });
+  if (res.status === 403) { el.className = 'status err'; el.textContent = 'WRONG CODE'; return; }
   if (!res.ok) { el.className = 'status err'; el.textContent = 'FAILED'; return; }
   if (!ping) { el.className = 'status ok'; el.textContent = 'OK'; setTimeout(() => { el.textContent = ''; }, 3000); return; }
   const started = Date.now();
@@ -382,30 +573,58 @@ def generate_passphrase(words: int) -> str:
     return "-".join(secrets.choice(WORDS) for _ in range(words))
 
 
-def print_setup_qr():
-    """Print a QR the app can scan: address + token in a wakepc:// uri."""
-    config = load_config()
+def advertised_host(config):
+    """The address to hand out — the tailnet one, which every peer can reach."""
     host = config["bind_host"]
-    if host in ("", "0.0.0.0"):
-        host = socket.gethostname()
-        print(f"warning: bind_host is 0.0.0.0 — QR will use hostname '{host}'", file=sys.stderr)
+    if host in ("", "auto", "0.0.0.0"):
+        host = own_tailnet_addr() or socket.gethostname()
+    return f"{host}:{config['port']}"
+
+
+def print_setup_qr():
+    """Print a QR the app can scan: a wakepc:// uri with the address."""
+    config = load_config()
     if shutil.which("qrencode") is None:
         sys.exit("error: qrencode not installed (apt install qrencode)")
-    uri = "wakepc://c?" + urllib.parse.urlencode({
-        "name": socket.gethostname().lower(),
-        "host": f"{host}:{config['port']}",
-        "token": config["token"],
-    })
-    subprocess.run(["qrencode", "-t", "ANSIUTF8", uri])
+    fields = {"name": socket.gethostname().lower(), "host": advertised_host(config)}
+    if config["token"]:
+        fields["token"] = config["token"]
+    subprocess.run(["qrencode", "-t", "ANSIUTF8", "wakepc://c?" + urllib.parse.urlencode(fields)])
     print("scan with the wakepc app: add connection -> scan setup qr")
+
+
+def print_status():
+    """What the app needs to reach this relay, and who it will let in."""
+    config = load_config()
+    print(f"address:  {advertised_host(config)}")
+    if config["trust_tailnet"] and tailscale_bin():
+        allowed = ", ".join(sorted(config["allow_users"])) or (own_login() or "this tailnet")
+        print(f"identity: on — devices belonging to {allowed} need no credential")
+    else:
+        print("identity: off — callers must send the token")
+    print(f"token:    {config['token'] or '(none — identity only)'}")
+    print(f"confirm:  {'enforced here' if config['confirm_code'] else 'app-side only'}")
+    gated = [n for n, c in config["commands"].items() if c.confirm]
+    print(f"commands: {', '.join(config['commands'])}")
+    if gated:
+        print(f"          confirmation required for: {', '.join(gated)}")
 
 
 def main():
     config = load_config()
     Handler.config = config
-    server = ThreadingHTTPServer((config["bind_host"], config["port"]), Handler)
+    host = config["bind_host"]
+    if host in ("", "auto"):
+        # Binding to the tailnet address means a LAN host cannot even open a
+        # connection claiming to be a peer. Fall back only if there is no
+        # tailnet address to bind to.
+        host = own_tailnet_addr() or "0.0.0.0"
+        if host == "0.0.0.0":
+            print("warning: no tailnet address found — listening on all interfaces", flush=True)
+    server = ThreadingHTTPServer((host, config["port"]), Handler)
     names = ", ".join(config["commands"])
-    print(f"wakepc listening on {config['bind_host']}:{config['port']} — commands: {names}", flush=True)
+    auth = "tailnet identity" if config["trust_tailnet"] and tailscale_bin() else "token"
+    print(f"wakepc listening on {host}:{config['port']} ({auth}) — commands: {names}", flush=True)
     server.serve_forever()
 
 
@@ -417,10 +636,13 @@ if __name__ == "__main__":
         print(generate_passphrase(max(3, min(count, 8))))
     elif sys.argv[1] == "qr":
         print_setup_qr()
+    elif sys.argv[1] == "status":
+        print_status()
     else:
         sys.exit(
             f"unknown command: {sys.argv[1]}\n"
             "usage: wakepc.py            run the server (systemd does this)\n"
+            "       wakepc.py status       show the address and how callers are let in\n"
             "       wakepc.py genpass [n]  generate an n-word passphrase (default 4)\n"
             "       wakepc.py qr           print the setup QR for the app"
         )

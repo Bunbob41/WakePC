@@ -43,19 +43,14 @@ m.CONFIG_PATH = r'$conf'
 m.main()
 "@ | ForEach-Object { [IO.File]::WriteAllText($runner, $_, (New-Object Text.UTF8Encoding($false))) }
 
+$fresh = $false
 if (Test-Path $conf) {
     Write-Host "keeping existing $conf"
-    $token = ''
 } else {
-    $token = (& $pythonConsole $script genpass 4).Trim()
-    if (-not $token) { throw 'could not generate a token' }
-    $ip = (& tailscale ip -4 2>$null | Select-Object -First 1)
-    if (-not $ip) { $ip = '0.0.0.0'; Write-Warning 'no tailscale IP found; binding to 0.0.0.0' }
-    $lines = @()
-    (Get-Content (Join-Path $src 'wakepc.conf.example')) `
-        -replace '^token = .*', "token = $token" `
-        -replace '^bind_host = .*', "bind_host = $ip" |
-        ForEach-Object { $lines += $_ }
+    $fresh = $true
+    # No token: this relay identifies callers with 'tailscale whois',
+    # so there is nothing to carry across to the phone.
+    $lines = Get-Content (Join-Path $src 'wakepc.conf.example')
     [IO.File]::WriteAllLines($conf, $lines, (New-Object Text.UTF8Encoding($false)))
     Write-Host "wrote $conf"
 }
@@ -112,11 +107,12 @@ if (-not $up) {
     if ($elevated) { Write-Warning 'if the task never runs, this machine may block Scheduled Tasks; use the unelevated install instead' }
 }
 
-$bind = (Select-String -Path $conf -Pattern '^bind_host = (.*)$').Matches.Groups[1].Value
-$port = (Select-String -Path $conf -Pattern '^port = (.*)$').Matches.Groups[1].Value
 Write-Host ''
 Write-Host "wakepc installed - $note"
-Write-Host "listening on ${bind}:${port}"
-if ($token) { Write-Host "token: $token" }
+$env:WAKEPC_CONFIG = $conf
+& $pythonConsole $script status
 Write-Host "log: $log"
-Write-Host 'add it in the app as another connection, then give this machine a shutdown button.'
+if ($fresh) {
+    Write-Host 'add it in the app as another connection - paste the address above, leave the token empty.'
+    Write-Host 'then set confirm_code in the config to your 6-digit code so the relay checks it too.'
+}

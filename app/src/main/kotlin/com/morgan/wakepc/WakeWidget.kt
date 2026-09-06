@@ -401,14 +401,18 @@ class RunAction : ActionCallback {
 
         // Authorised at placement, never mid-tap: a widget has no way to ask.
         val prefs = getAppWidgetState(context, PreferencesGlanceStateDefinition, glanceId)
-        if (state.gateFor(target.command).isNotBlank() && prefs[authorisedKey] != "yes") {
+        val gate = state.gateFor(target.command)
+        if (gate.isNotBlank() && prefs[authorisedKey] != "yes") {
             setStatus(context, glanceId, machineId, "NOT AUTHORISED")
             return
         }
+        // An elevated command still has to satisfy the relay, so an authorised
+        // widget carries the code. That is what placing it agreed to.
+        val confirmCode = if (target.command.elevated) gate else ""
 
         setStatus(context, glanceId, machineId, "SENDING")
         when {
-            WakeApi.run(target.connection, target.command.name).isFailure -> {
+            WakeApi.run(target.connection, target.command.name, confirmCode).isFailure -> {
                 setStatus(context, glanceId, machineId, "FAILED")
             }
 

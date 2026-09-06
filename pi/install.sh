@@ -21,16 +21,14 @@ install -d /opt/wakepc
 install -m 644 "$SRC/wakepc.py" /opt/wakepc/wakepc.py
 install -m 644 "$SRC/wakepc.service" /etc/systemd/system/wakepc.service
 
+FRESH=""
 if [ -f /etc/wakepc.conf ]; then
   echo "keeping existing /etc/wakepc.conf"
-  TOKEN=""
 else
-  TOKEN="$(python3 "$SRC/wakepc.py" genpass 4)"
-  BIND="$(tailscale ip -4 2>/dev/null | head -1 || true)"
-  [ -n "$BIND" ] || BIND="0.0.0.0"
-  sed -e "s|^token = .*|token = ${TOKEN}|" \
-      -e "s|^bind_host = .*|bind_host = ${BIND}|" \
-      "$SRC/wakepc.conf.example" > /etc/wakepc.conf
+  FRESH="yes"
+  # No token is generated: callers are identified by tailscale whois,
+  # so there is nothing for you to copy across to the phone.
+  cp "$SRC/wakepc.conf.example" /etc/wakepc.conf
   echo "wrote /etc/wakepc.conf"
 fi
 chown wakepc:wakepc /etc/wakepc.conf
@@ -56,10 +54,10 @@ if ! systemctl is-active --quiet wakepc; then
 fi
 
 echo
-echo "wakepc is running on $(grep '^bind_host' /etc/wakepc.conf | awk '{print $3}'):$(grep '^port' /etc/wakepc.conf | awk '{print $3}')"
-if [ -n "$TOKEN" ]; then
-  echo "token: $TOKEN"
+python3 /opt/wakepc/wakepc.py status
+if [ -n "$FRESH" ]; then
   echo
   echo "Next: edit /etc/wakepc.conf to set your PC's MAC and ping IP,"
   echo "then 'sudo systemctl restart wakepc'."
+  echo "In the app: add connection, paste the address above. No token."
 fi

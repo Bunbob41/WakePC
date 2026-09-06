@@ -68,6 +68,16 @@ The phone can only ask for these **by name**. It can never send a command of its
 own. That is the core security idea: even if someone got hold of your phone, they
 could only do the handful of things you already decided were allowed.
 
+**There is no password to set up.** When a request arrives, the relay asks
+Tailscale who sent it. Tailscale addresses cannot be faked — they are tied to
+each device's cryptographic key — so tailscaled can say "that was your phone,
+and your phone belongs to you". A device you already trust is therefore
+recognised on sight, and you never type or copy a secret anywhere.
+
+You can narrow this to named accounts (`allow_users`) if your tailnet is shared
+with other people. A password-style token still exists for machines with no
+Tailscale command installed, but you should not need it.
+
 It also serves a small web page (a "panel") you can open in any browser on your
 tailnet, to run the same commands from a computer.
 
@@ -111,9 +121,15 @@ command asks for a code first:
 - **Long code (6 digits)** — anything that disrupts a running machine:
   shutdown, restart, sleep.
 
-Commands are marked as needing the long code automatically when their name says
-so (anything with *shutdown*, *restart*, *reboot*, *sleep*, *suspend*), and you
-can change that per command.
+**The relay decides which is which**, because it is the only part that knows what
+a command actually does — a button called "goodnight" that really runs a shutdown
+gets the long code regardless of its name. You can override it per command in the
+config.
+
+The long code is checked **in two places**: the app asks you for it, and the
+relay demands it again before running. That second check is what makes it real
+rather than a politeness — without the code, a shutdown request is refused even
+if it reaches the relay.
 
 **Widgets are the exception**, deliberately. A home-screen widget cannot stop and
 ask you for a code mid-tap. So it asks **once, when you place it** — entering the
@@ -142,7 +158,8 @@ sequenceDiagram
     You->>App: tap "wake-pc"
     App->>You: asks for the short code
     You->>App: 4 digits
-    App->>Pi: POST /run/wake-pc (over Tailscale)
+    App->>Pi: POST /run/wake-pc (over Tailscale, no password)
+    Pi->>Pi: asks tailscaled: whose address is this?
     Pi->>PC: magic packet on the LAN
     Pi-->>App: sent
     loop until it answers
@@ -173,3 +190,7 @@ sequenceDiagram
   something did not work.
 - **Nothing is in the cloud.** There is no server of mine or anyone else's in the
   path; it is your phone talking to your own machines.
+- **The relay listens only on its Tailscale address.** A machine on your home
+  wifi that is not on the tailnet cannot even open a connection to it.
+- **`wakepc.py status`** on either machine prints its address, who it will let
+  in, and which commands need the code — the quickest way to check a setup.

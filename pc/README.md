@@ -12,10 +12,14 @@ That means no SSH server, no stored Windows credentials, and no polling delay.
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-It copies the service to `%LOCALAPPDATA%\WakePC`, generates a token, binds to
-this machine's Tailscale IP, starts it, and adds a hidden launcher to the
-Startup folder so it comes back at logon. It prints the token — that goes in
+It copies the service to `%LOCALAPPDATA%\WakePC`, binds to this machine's
+Tailscale address, starts it, and adds a hidden launcher to the Startup folder
+so it comes back at logon. There is no token to copy — it prints the address for
 the app. Re-running never overwrites an existing config.
+
+Every command here interrupts a machine somebody may be using, so set
+`confirm_code` in `%LOCALAPPDATA%\WakePC\wakepc.conf` to the long code you use
+in the app; the relay then refuses a shutdown that does not carry it.
 
 Nothing here needs administrator rights, and no firewall rule is required:
 Tailscale's interface is already permitted, so the service is reachable from

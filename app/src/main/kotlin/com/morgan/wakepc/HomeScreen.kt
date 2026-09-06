@@ -172,7 +172,9 @@ fun HomeScreen(
             onDismiss = { pending = null },
             onAccepted = {
                 pending = null
-                vm.run(p.machine, p.connection, p.command)
+                // Elevated commands send the code on to the relay, which
+                // checks it again — accepting here is not the last word.
+                vm.run(p.machine, p.connection, p.command, if (p.command.elevated) p.gate else "")
             },
         )
     }

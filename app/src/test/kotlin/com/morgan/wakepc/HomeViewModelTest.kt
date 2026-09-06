@@ -47,6 +47,30 @@ class HomeViewModelTest {
         }
 
     @Test
+    fun `the confirmation code is forwarded to the relay, which checks it too`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository()
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, reboot, confirmCode = "246810")
+            advanceUntilIdle()
+
+            assertEquals(listOf("246810"), fake.confirmCodes)
+        }
+
+    @Test
+    fun `an ordinary command sends no code`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository()
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertEquals(listOf(""), fake.confirmCodes)
+        }
+
+    @Test
     fun `a wake that never answers leaves the machine not awake`() =
         runTest(dispatcher) {
             val fake = FakeWakeRepository().apply { statsResult = Result.success(asleep()) }
@@ -113,6 +137,7 @@ class HomeViewModelTest {
 
 private class FakeWakeRepository : WakeRepository {
     val runCalls = mutableListOf<String>()
+    val confirmCodes = mutableListOf<String>()
     var runResult: Result<Unit> = Result.success(Unit)
     var statsResult: Result<PingStats> = Result.success(PingStats(true, 0.0, 1.0, 2.0, 3.0))
     var runGate: CompletableDeferred<Unit>? = null
@@ -122,8 +147,10 @@ private class FakeWakeRepository : WakeRepository {
     override suspend fun run(
         connection: Connection,
         command: String,
+        confirmCode: String,
     ): Result<Unit> {
         runCalls += command
+        confirmCodes += confirmCode
         runGate?.await()
         return runResult
     }

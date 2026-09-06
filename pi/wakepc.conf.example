@@ -1,15 +1,26 @@
 # Copy to /etc/wakepc.conf, then: sudo chown wakepc:wakepc /etc/wakepc.conf && sudo chmod 600 /etc/wakepc.conf
 [wakepc]
-# The app authenticates with this. Anything from a 4-digit PIN up works —
-# the server locks auth out after repeated bad guesses, and the tailnet is
-# the primary wall. Stronger options if you want them:
-#   word passphrase: python3 wakepc.py genpass 5  -> maple-otter-comet-birch-flint
-#   max entropy:     openssl rand -hex 32
-# Skip typing entirely: python3 wakepc.py qr prints a QR the app can scan.
-token = REPLACE_ME
+# Callers are identified by asking tailscaled who owns the address the request
+# came from (`tailscale whois`). WireGuard has already proved that address, so
+# a device on your tailnet needs no credential and you have nothing to type.
+trust_tailnet = yes
 
-# Bind to the Pi's Tailscale IP (tailscale ip -4) so only the tailnet can reach it.
-bind_host = 0.0.0.0
+# Which tailnet accounts may call. Empty means any device in this tailnet,
+# which is what you want unless the tailnet is shared with other people.
+# allow_users = you@example.com
+
+# Only needed if this host has no tailscale CLI, or trust_tailnet is off.
+# Generate one: python3 wakepc.py genpass 5  -> maple-otter-comet-birch-flint
+# token =
+
+# The confirmation code for commands marked `confirm` below. Set it to the
+# long code you use in the app, so the relay checks it as well and the gate
+# is not just the app being polite. Leave unset to let the app be the only gate.
+# confirm_code = 000000
+
+# "auto" binds to this host's Tailscale address, so nothing off the tailnet can
+# even open a connection. Set an address explicitly to override.
+bind_host = auto
 port = 8787
 
 # Each [command:<name>] becomes a button the app can invoke — by name only,
@@ -19,6 +30,10 @@ port = 8787
 # Optional per command:
 #   ping = <ip>            lets the app show awake/asleep for this command
 #   broadcast_ip = <ip>    WOL only; default 255.255.255.255
+#   confirm = yes|no       require the confirmation code. Defaults to yes for
+#                          anything that looks like it interrupts a running
+#                          machine; set it by hand for commands whose name
+#                          does not give them away.
 
 [command:wake-pc]
 run = WOL AA:BB:CC:DD:EE:FF

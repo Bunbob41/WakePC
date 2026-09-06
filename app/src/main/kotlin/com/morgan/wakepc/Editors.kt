@@ -253,8 +253,8 @@ fun ConnectionEditor(
                 ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "e.g. the tailscale IP, tried if the first fails")
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("TOKEN")
-                ConsoleField(token, { token = it }, secret = true)
+                SectionLabel("TOKEN · USUALLY NOT NEEDED")
+                ConsoleField(token, { token = it }, secret = true, placeholder = "leave empty — the relay knows your device")
             }
             Box(
                 modifier =
@@ -478,7 +478,7 @@ fun MachineEditor(
                                                     it.name == cmd.name && it.connectionId == cmd.connectionId
                                                 }
                                             } else {
-                                                selected + cmd.copy(elevated = looksDisruptive(cmd.name))
+                                                selected + cmd
                                             }
                                     }.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,

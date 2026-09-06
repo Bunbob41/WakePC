@@ -82,6 +82,61 @@ class ConfigTest(unittest.TestCase):
                     wakepc.load_config()
 
 
+class AuthTest(unittest.TestCase):
+
+    def test_a_tailnet_relay_needs_no_token_at_all(self):
+        # The point of the identity path: nothing to type, nothing to leak.
+        write_config(VALID.replace("token = test-token", ""))
+        config = wakepc.load_config()
+        self.assertEqual(config["token"], "")
+        self.assertTrue(config["trust_tailnet"])
+
+    def test_turning_identity_off_makes_a_token_mandatory(self):
+        write_config(VALID.replace("token = test-token", "trust_tailnet = no"))
+        with self.assertRaises(SystemExit):
+            wakepc.load_config()
+
+    def test_allow_users_is_parsed_as_a_lowercased_set(self):
+        write_config(VALID.replace("token = test-token", "allow_users = You@Example.com, other@example.com"))
+        self.assertEqual(
+            wakepc.load_config()["allow_users"],
+            {"you@example.com", "other@example.com"},
+        )
+
+    def test_only_the_relay_decides_what_is_elevated(self):
+        write_config(VALID)
+        commands = wakepc.load_config()["commands"]
+        # A magic packet can only turn something on.
+        self.assertFalse(commands["wake-pc"].confirm)
+        # This one actually reboots the machine, whatever it is called.
+        self.assertTrue(commands["reboot-pi"].confirm)
+
+    def test_an_unrecognised_shell_command_can_be_marked_by_hand(self):
+        write_config(VALID.replace(
+            "run = shell sudo /usr/sbin/reboot",
+            "run = shell /usr/local/bin/goodnight" + chr(10) + "confirm = yes",
+        ))
+        self.assertTrue(wakepc.load_config()["commands"]["reboot-pi"].confirm)
+
+    def test_a_confirm_code_must_be_digits(self):
+        write_config(VALID.replace("port = 8787", "port = 8787" + chr(10) + "confirm_code = hunter2"))
+        with self.assertRaises(SystemExit):
+            wakepc.load_config()
+
+    def test_only_tailnet_addresses_are_ever_treated_as_peers(self):
+        for addr, expected in [
+            ("100.64.0.2", True),
+            ("100.127.255.254", True),
+            ("192.168.1.50", False),
+            ("8.8.8.8", False),
+            ("127.0.0.1", False),
+        ]:
+            with self.subTest(addr):
+                parsed = wakepc.ipaddress.ip_address(addr)
+                inside = any(parsed in net for net in wakepc.TAILNET_NETS)
+                self.assertEqual(inside, expected)
+
+
 class MagicPacketTest(unittest.TestCase):
 
     def test_packet_is_six_ff_bytes_then_the_mac_sixteen_times(self):

@@ -23,6 +23,7 @@ interface WakeRepository {
     suspend fun run(
         connection: Connection,
         command: String,
+        confirmCode: String = "",
     ): Result<Unit>
 
     suspend fun status(
@@ -67,14 +68,23 @@ object WakeApi : WakeRepository {
             val array = JSONObject(body).getJSONArray("commands")
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
-                CommandRef(obj.getString("name"), obj.optBoolean("ping"))
+                val name = obj.getString("name")
+                CommandRef(
+                    name = name,
+                    ping = obj.optBoolean("ping"),
+                    // The relay knows what the command actually runs, so it
+                    // decides. Only guess from the name for older relays that
+                    // do not say — and guess towards the safer answer.
+                    elevated = if (obj.has("elevated")) obj.getBoolean("elevated") else looksDisruptive(name),
+                )
             }
         }
 
     override suspend fun run(
         connection: Connection,
         command: String,
-    ): Result<Unit> = request(connection, "run/$command", post = true).map { }
+        confirmCode: String,
+    ): Result<Unit> = request(connection, "run/$command", post = true, confirmCode = confirmCode).map { }
 
     override suspend fun status(
         connection: Connection,
@@ -105,6 +115,7 @@ object WakeApi : WakeRepository {
         path: String,
         post: Boolean,
         probe: Boolean = false,
+        confirmCode: String = "",
     ): Result<String> =
         withContext(Dispatchers.IO) {
             val method = if (post) "POST" else "GET"
@@ -119,14 +130,18 @@ object WakeApi : WakeRepository {
                 val startedAt = System.currentTimeMillis()
                 val attempt =
                     runCatching {
-                        val builder =
-                            Request
-                                .Builder()
-                                .url("$base/$path")
-                                .header("Authorization", "Bearer ${connection.token}")
+                        val builder = Request.Builder().url("$base/$path")
+                        // Usually absent: a relay on the tailnet identifies us
+                        // by our peer address and needs no credential at all.
+                        if (connection.token.isNotBlank()) {
+                            builder.header("Authorization", "Bearer ${connection.token}")
+                        }
+                        if (confirmCode.isNotBlank()) {
+                            builder.header("X-WakePC-Confirm", confirmCode)
+                        }
                         if (post) builder.post(ByteArray(0).toRequestBody())
                         (if (probe) probeClient else client).newCall(builder.build()).execute().use { response ->
-                            check(response.isSuccessful) { "HTTP ${response.code}" }
+                            check(response.isSuccessful) { explain(response.code) }
                             response.body.string()
                         }
                     }
@@ -141,6 +156,17 @@ object WakeApi : WakeRepository {
             Result.failure(failure ?: IllegalStateException(reason))
         }
 }
+
+private const val HTTP_UNAUTHORIZED = 401
+private const val HTTP_FORBIDDEN = 403
+
+/** HTTP codes the relay uses deliberately, said in words the console can show. */
+private fun explain(code: Int): String =
+    when (code) {
+        HTTP_UNAUTHORIZED -> "this relay doesn't recognise you — check it can see your device on the tailnet"
+        HTTP_FORBIDDEN -> "wrong confirmation code"
+        else -> "HTTP $code"
+    }
 
 /**
  * Android does not apply Tailscale's DNS search domain to app lookups, so a
