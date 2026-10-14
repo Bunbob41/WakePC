@@ -16,6 +16,10 @@ jobs:
           java-version: "21"
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes 'tools', which sdkmanager no longer has; asking for it
+          # fails the step (seen in FreqLens CI, 2026-10-13).
+          packages: platform-tools
       - name: Install compile SDK
         # `yes` takes a broken pipe when sdkmanager stops reading; under the
         # runner's pipefail that would fail the step, so tolerate it — the
