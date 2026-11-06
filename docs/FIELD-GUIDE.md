@@ -193,6 +193,9 @@ sequenceDiagram
 ## Things worth knowing
 
 - **The app never stores a shell command.** All it knows is a list of names.
+- **Everything in the app is open source.** It used to include one closed piece
+  from Google, a QR scanner for setting up a connection. Once passwords went
+  away the QR only saved typing an address, so it was removed.
 - **Status is a real ping**, done by the relay on your LAN, so "awake" means the
   machine genuinely answered, not that a packet was sent hopefully.
 - **The console** (tap the `>` line above the main button) lists every request the

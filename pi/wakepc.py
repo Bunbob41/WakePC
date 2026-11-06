@@ -158,7 +158,7 @@ def _tailscale(*args, timeout=5):
 
 
 def own_tailnet_addr():
-    """This host's own tailnet address, for binding and for the QR."""
+    """This host's own tailnet address, for binding and for `status`."""
     out = _tailscale("ip", "-4")
     if not out:
         return None
@@ -351,7 +351,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         # The panel page itself is public (it holds no secrets); every API
-        # call it makes, /qr.png included, still needs the bearer token.
+        # call it makes still needs the caller to be recognised.
         if urllib.parse.urlparse(self.path).path in ("", "/"):
             return self._reply_raw(200, "text/html; charset=utf-8", PANEL_HTML.encode())
         if not self._authorized():
@@ -362,19 +362,6 @@ class Handler(BaseHTTPRequestHandler):
             count = int(query.get("count", ["1"])[0])
         except ValueError:
             count = 1
-        if parsed.path == "/qr.png":
-            if shutil.which("qrencode") is None:
-                return self._reply(500, {"error": "qrencode not installed"})
-            uri = "wakepc://c?" + urllib.parse.urlencode({
-                "name": socket.gethostname().lower(),
-                "host": f"{self.server.server_address[0]}:{self.config['port']}",
-                "token": self.config["token"],
-            })
-            png = subprocess.run(
-                ["qrencode", "-o", "-", "-t", "PNG", "-s", "8", uri],
-                capture_output=True,
-            ).stdout
-            return self._reply_raw(200, "image/png", png)
         if parsed.path == "/commands":
             # `elevated` is decided here, not guessed by the client: this is
             # the only place that knows a command actually runs `shutdown`.
@@ -450,7 +437,6 @@ PANEL_HTML = """<!doctype html>
                    letter-spacing:1px; width:100%; padding:14px; border-radius:8px; }
   input { background:#101315; border:1px solid #1e242a; border-radius:6px; color:#e6e3dc;
           font:inherit; font-size:14px; padding:12px 14px; width:100%; box-sizing:border-box; margin-bottom:12px; }
-  #qrimg { display:none; margin-top:12px; border-radius:8px; width:260px; max-width:100%; }
   .hint { font-size:11px; color:#3a434c; line-height:1.7; }
 </style></head><body><div class="wrap">
 <h1><span>&#9211;</span> WAKEPC <span style="color:#5f6871">PANEL</span></h1>
@@ -462,10 +448,7 @@ PANEL_HTML = """<!doctype html>
 <div id="panel" style="display:none">
   <div class="label">COMMANDS</div>
   <div id="cmds"></div>
-  <div class="label">SETUP QR</div>
-  <button onclick="showQr()">show setup qr</button>
-  <img id="qrimg" alt="setup qr">
-  <p class="hint" id="who">scan from the phone app: add connection &#8594; scan setup qr.</p>
+  <p class="hint" id="who">add this relay in the phone app with its tailscale name or address.</p>
 </div>
 <script>
 let token = localStorage.getItem('wakepc_token') || '';
@@ -538,13 +521,6 @@ async function run(name, ping, elevated) {
   el.className = 'status err'; el.textContent = 'NO REPLY YET';
 }
 
-async function showQr() {
-  const res = await api('/qr.png');
-  if (!res.ok) return;
-  $('qrimg').src = URL.createObjectURL(await res.blob());
-  $('qrimg').style.display = 'block';
-}
-
 init();
 </script></div></body></html>
 """
@@ -577,18 +553,6 @@ def advertised_host(config):
     if host in ("", "auto", "0.0.0.0"):
         host = own_tailnet_addr() or socket.gethostname()
     return f"{host}:{config['port']}"
-
-
-def print_setup_qr():
-    """Print a QR the app can scan: a wakepc:// uri with the address."""
-    config = load_config()
-    if shutil.which("qrencode") is None:
-        sys.exit("error: qrencode not installed (apt install qrencode)")
-    fields = {"name": socket.gethostname().lower(), "host": advertised_host(config)}
-    if config["token"]:
-        fields["token"] = config["token"]
-    subprocess.run(["qrencode", "-t", "ANSIUTF8", "wakepc://c?" + urllib.parse.urlencode(fields)])
-    print("scan with the wakepc app: add connection -> scan setup qr")
 
 
 def print_status():
@@ -632,8 +596,6 @@ if __name__ == "__main__":
     elif sys.argv[1] == "genpass":
         count = int(sys.argv[2]) if len(sys.argv) > 2 else 4
         print(generate_passphrase(max(3, min(count, 8))))
-    elif sys.argv[1] == "qr":
-        print_setup_qr()
     elif sys.argv[1] == "status":
         print_status()
     else:
@@ -641,6 +603,5 @@ if __name__ == "__main__":
             f"unknown command: {sys.argv[1]}\n"
             "usage: wakepc.py            run the server (systemd does this)\n"
             "       wakepc.py status       show the address and how callers are let in\n"
-            "       wakepc.py genpass [n]  generate an n-word passphrase (default 4)\n"
-            "       wakepc.py qr           print the setup QR for the app"
+            "       wakepc.py genpass [n]  generate an n-word passphrase (default 4)"
         )

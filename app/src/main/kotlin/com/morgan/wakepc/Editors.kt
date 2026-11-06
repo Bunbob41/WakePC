@@ -31,9 +31,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.launch
 
 val connectionColors =
@@ -147,8 +144,6 @@ fun ConnectionEditor(
                 .randomUUID()
                 .toString()
         }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var scanMsg by remember { mutableStateOf<Pair<String, Color>?>(null) }
 
     LaunchedEffect(connectionId) {
         // Already populated (rotation, process death): keep what's on screen.
@@ -184,42 +179,6 @@ fun ConnectionEditor(
                     .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .dashedBorder(Palette.dashed, 6.dp)
-                        .clickable {
-                            scanMsg = "opening scanner…" to Palette.dim
-                            val options =
-                                GmsBarcodeScannerOptions
-                                    .Builder()
-                                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                                    .build()
-                            GmsBarcodeScanning
-                                .getClient(context, options)
-                                .startScan()
-                                .addOnSuccessListener { barcode ->
-                                    val uri = barcode.rawValue?.let(android.net.Uri::parse)
-                                    if (uri?.scheme == "wakepc") {
-                                        uri.getQueryParameter("name")?.let { if (name.isBlank()) name = it }
-                                        uri.getQueryParameter("host")?.let { baseUrl = it }
-                                        uri.getQueryParameter("fallback")?.let { fallbackUrl = it }
-                                        uri.getQueryParameter("token")?.let { token = it }
-                                        scanMsg = "scanned — tap test connection to verify" to Palette.green
-                                    } else {
-                                        scanMsg = "not a wakepc setup qr" to Palette.red
-                                    }
-                                }.addOnCanceledListener { scanMsg = null }
-                                .addOnFailureListener {
-                                    scanMsg = "scanner unavailable: ${it.message ?: "unknown"} — type the details instead" to Palette.red
-                                }
-                        }.padding(vertical = 13.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                ConsoleText("scan setup qr — from the pi panel or 'wakepc.py qr'", size = 12, color = Palette.dim)
-            }
-            scanMsg?.let { (text, color) -> ConsoleText(text, size = 11, color = color) }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("NAME")
                 ConsoleField(name, { name = it }, placeholder = "my pi")

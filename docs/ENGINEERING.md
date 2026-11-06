@@ -37,8 +37,8 @@ Preferences. Widgets bypass the ViewModel and call `WakeApi` directly, because a
 Glance `ActionCallback` has no lifecycle to host one.
 
 **Wire protocol** (`pi/wakepc.py`): `GET /commands`, `POST /run/<name>`,
-`GET /status/<name>?count=N`, legacy `/wake` + `/status`, plus `/` (HTML panel)
-and `/qr.png`. Callers are identified by `tailscale whois` on the source
+`GET /status/<name>?count=N`, legacy `/wake` + `/status`, plus `/` (HTML
+panel). Callers are identified by `tailscale whois` on the source
 address; a bearer token is the fallback. Commands the relay marks `elevated`
 additionally require `X-WakePC-Confirm`. 8 failures in 5 minutes locks the
 caller out. Commands are *named entries in the relay's own config*: the client
@@ -47,6 +47,27 @@ can never supply a shell string.
 ## Decision log
 
 Newest first. Each entry: the decision, why, and what it replaced.
+
+### The setup QR is gone, and the app is fully open source (0.14.0)
+
+Removed the "scan setup qr" button, the Pi panel's QR, the relay's `/qr.png`
+route and `qr` command, the `qrencode` install, and the Google Play services
+code scanner the app used to read it.
+
+*Why:* the QR was added when every connection needed a long passphrase token,
+and scanning it saved typing one. Since 0.12.0 there is no token, so it only
+filled in a name and an address, which is quicker to type than getting the QR
+onto a screen in front of the phone. It was also the app's only closed-source
+dependency. **Replaced:** typing the Pi's Tailscale name or address.
+
+*Effect:* the APK went from 3,870,682 to 3,423,439 bytes, and no
+`com.google.mlkit` or `com.google.android.gms` code remains in it. That also
+removes the blocker to listing on F-Droid. A relay that still uses a token
+(one without the tailscale CLI) now means typing the token by hand.
+
+*Guards:* `OpenSourceTest` fails if Play services classes return to the
+classpath, and `SetupQrRemovedTest` covers the route, the panel and the
+command.
 
 ### Presentation pass: MIT licence, one release, a real front page (after 0.13.0)
 
@@ -58,7 +79,7 @@ Store. Without a licence the code was legally "all rights reserved", so they
 could read it but not use it. MIT was chosen over GPL v3 because the point of
 publishing is easy adoption, GPL's protection only matters if it would be
 enforced, and GPL sits awkwardly with the closed-source Play services QR
-scanner the app uses. The licence binds others, not the owner, who can still
+scanner the app used at the time (removed in 0.14.0). The licence binds others, not the owner, who can still
 publish or sell it.
 
 *Releases:* 15 old release pages were deleted after their APKs and notes were

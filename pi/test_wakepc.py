@@ -2,9 +2,16 @@
 """Unit tests for the wakepc service. Run: python3 -m unittest -v test_wakepc"""
 
 import importlib.util
+import json
+import os
 import pathlib
+import subprocess
+import sys
 import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 
 # wakepc.py exits at import time if /etc/wakepc.conf is missing, so load it as a
 # module without running main() and point CONFIG_PATH at a temp file per test.
@@ -183,6 +190,68 @@ class PassphraseTest(unittest.TestCase):
         self.assertTrue(all(word in wakepc.WORDS for word in phrase.split("-")))
         # Not a serious entropy check, just a guard against a constant generator.
         self.assertGreater(len({wakepc.generate_passphrase(4) for _ in range(20)}), 15)
+
+
+# A relay that identifies callers by token rather than by Tailscale, so these
+# tests need no tailnet, listening on loopback only.
+LOOPBACK = VALID.replace("bind_host = 100.64.0.2", "bind_host = 127.0.0.1").replace(
+    "token = test-token", "token = test-token\ntrust_tailnet = no"
+)
+
+
+class SetupQrRemovedTest(unittest.TestCase):
+    """The setup QR went in 0.14.0. Once tokens went away it only filled in an
+    address, which is quicker to type, and it was the app's one closed-source
+    dependency. These guard against it coming back half-wired."""
+
+    @classmethod
+    def setUpClass(cls):
+        write_config(LOOPBACK)
+        wakepc.Handler.config = wakepc.load_config()
+        wakepc.Handler.log_message = lambda *args: None
+        cls.server = wakepc.ThreadingHTTPServer(("127.0.0.1", 0), wakepc.Handler)
+        cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def get(self, path):
+        request = urllib.request.Request(
+            self.base + path, headers={"Authorization": "Bearer test-token"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, response.read()
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, error.read()
+
+    def test_the_qr_endpoint_is_gone(self):
+        status, body = self.get("/qr.png")
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body), {"error": "not found"})
+
+    def test_the_panel_offers_no_qr(self):
+        status, body = self.get("/")
+        self.assertEqual(status, 200)
+        page = body.decode().lower()
+        self.assertNotIn("qr", page)
+        self.assertIn("tailscale name or address", page)
+
+    def test_the_qr_command_is_unknown(self):
+        done = subprocess.run(
+            [sys.executable, str(pathlib.Path(__file__).with_name("wakepc.py")), "qr"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={**os.environ, "WAKEPC_CONFIG": write_config(LOOPBACK)},
+        )
+        self.assertNotEqual(done.returncode, 0)
+        self.assertTrue(done.stderr.startswith("unknown command: qr"), done.stderr)
+        self.assertNotIn("qr", done.stderr.split("\n", 1)[1])
 
 
 if __name__ == "__main__":

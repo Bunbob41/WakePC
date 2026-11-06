@@ -83,7 +83,6 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.gms.code.scanner)
     implementation(libs.androidx.glance.appwidget)
 
     testImplementation(libs.junit)

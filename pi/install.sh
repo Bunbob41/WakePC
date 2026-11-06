@@ -41,9 +41,6 @@ if [ ! -f /etc/sudoers.d/wakepc ]; then
   visudo -c -q || { rm -f /etc/sudoers.d/wakepc; echo "warning: sudoers rule rejected, removed" >&2; }
 fi
 
-# Optional: only needed for the setup-QR feature.
-command -v qrencode >/dev/null 2>&1 || apt-get install -y -qq qrencode >/dev/null 2>&1 || true
-
 systemctl daemon-reload
 systemctl enable --now wakepc >/dev/null
 sleep 1
