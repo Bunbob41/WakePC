@@ -170,7 +170,7 @@ private fun explain(code: Int): String =
 
 /**
  * Android does not apply Tailscale's DNS search domain to app lookups, so a
- * bare MagicDNS name like "pi-nd" resolves from a desktop but never from the
+ * bare MagicDNS name like "mypi" resolves from a desktop but never from the
  * phone. Say so, instead of surfacing a raw resolver exception.
  */
 private fun describe(failure: Throwable?): String =

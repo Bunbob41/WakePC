@@ -1,7 +1,7 @@
-# wakepc — the home-side service
+# wakepc: the home-side service
 
 The Android app is only half of WakePC. This service is the other half: it runs
-on a machine that stays on at home (a Pi, a NAS — anything with systemd and
+on a machine that stays on at home (a Pi, a NAS, anything with systemd and
 python3) and does the things the phone can't reach, like broadcasting a
 Wake-on-LAN packet onto your LAN.
 
@@ -19,7 +19,7 @@ sudo ./install.sh
 
 That creates an unprivileged `wakepc` user, installs the service to
 `/opt/wakepc`, writes `/etc/wakepc.conf`, binds to your Tailscale address, and
-enables it at boot. It prints the address to type into the app — there is no
+enables it at boot. It prints the address to type into the app: there is no
 token to copy. Re-running it later updates the code and **never overwrites your
 config**.
 
@@ -45,13 +45,13 @@ broadcast_ip = 192.168.1.255    # optional: your subnet's broadcast
 run = shell sudo /usr/sbin/reboot
 ```
 
-The MAC is your PC's *ethernet* adapter — `ipconfig /all` on Windows,
+The MAC is your PC's *ethernet* adapter: `ipconfig /all` on Windows,
 "Physical Address". `run` is either `WOL <mac>` or `shell <command line>`.
 Shell commands run as the unprivileged `wakepc` user; the installer adds a
 sudoers rule for `/usr/sbin/reboot` only, so anything else privileged needs its
 own rule.
 
-The phone can only ask for these **by name** — it can never send a shell
+The phone can only ask for these **by name**: it can never send a shell
 command across the wire.
 
 ## Connect the app
@@ -74,7 +74,7 @@ already proved that address belongs to that peer's key, so tailscaled can name
 the node and the account behind it, and a recognised device needs no credential.
 
 - `allow_users = you@example.com` restricts to named accounts. Empty means any
-  device in this tailnet — right unless the tailnet is shared with other people.
+  device in this tailnet, which is right unless the tailnet is shared with other people.
 - `bind_host = auto` listens only on the Tailscale address, so a host on your
   home wifi cannot open a connection at all.
 - `confirm_code = <digits>` is required by commands marked `confirm` (anything
@@ -99,4 +99,4 @@ python3 -m unittest -v        # from this directory
   fine here.
 - If the magic packet doesn't wake the PC: enable WOL in BIOS/UEFI, enable
   "Wake on Magic Packet" on the network adapter, and turn off Windows Fast
-  Startup — it breaks WOL from a full shutdown on many boards.
+  Startup: it breaks WOL from a full shutdown on many boards.

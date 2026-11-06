@@ -1,12 +1,12 @@
 # wakepc on Windows
 
 > **You probably do not need this.** It exists so the phone can shut down,
-> restart or sleep the PC — but any remote desktop tool already does that, and
+> restart or sleep the PC, but any remote desktop tool already does that, and
 > a machine you can remote into is already awake. Waking a machine that is off
 > is the only thing WakePC does that nothing else can, and that lives on the
 > Pi. Install this only if you specifically want those buttons on your phone.
 
-The Pi can wake this machine, but it cannot shut it down — only the machine
+The Pi can wake this machine, but it cannot shut it down: only the machine
 itself can do that. So the same service runs here too, and the PC becomes a
 second connection in the app with its own commands.
 
@@ -20,7 +20,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 It copies the service to `%LOCALAPPDATA%\WakePC`, binds to this machine's
 Tailscale address, starts it, and adds a hidden launcher to the Startup folder
-so it comes back at logon. There is no token to copy — it prints the address for
+so it comes back at logon. There is no token to copy: it prints the address for
 the app. Re-running never overwrites an existing config.
 
 Every command here interrupts a machine somebody may be using, so set
@@ -36,7 +36,7 @@ your tailnet and from nowhere else.
 A machine in the app can take commands from more than one connection, so your
 PC shows up as a single card with `wake-pc` (through the Pi) and `shutdown-pc`
 (through the PC itself) side by side. In the machine editor the commands are
-grouped by connection — tick whichever you want, from either.
+grouped by connection: tick whichever you want, from either.
 
 ## Commands
 
@@ -65,7 +65,7 @@ Start-Process pythonw "$env:LOCALAPPDATA\WakePC\run.py" -WindowStyle Hidden
 
 - **Unelevated, it runs while you are logged in.** The launcher lives in the
   Startup folder, so after a remote wake the service is not up until someone
-  logs in — enough to shut down a machine you left on, not one you just woke.
+  logs in: enough to shut down a machine you left on, not one you just woke.
 
   Run the installer **as Administrator** and it registers a SYSTEM task that
   starts at boot instead, which covers that case. It removes the logon

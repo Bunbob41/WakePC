@@ -1,4 +1,4 @@
-# WakePC — Field Guide
+# WakePC: Field Guide
 
 This explains what WakePC is, what every piece does, and how they fit together.
 No code required. If you read only one document, read this one.
@@ -7,15 +7,15 @@ No code required. If you read only one document, read this one.
 
 Turning on a PC you are not sitting next to used to mean: open an SSH app on the
 phone, connect to the Raspberry Pi, find a saved snippet, paste it, hope. WakePC
-replaces that with **one tap** — and tells you whether it actually worked.
+replaces that with **one tap**, and tells you whether it actually worked.
 
 **That is the whole point, and it is worth being clear about the boundary:** a
 remote desktop tool can already shut down, restart or lock your PC. What it
-cannot do is turn on a machine that is off — you cannot remote into something
+cannot do is turn on a machine that is off: you cannot remote into something
 that is not running. Waking is the one thing here that nothing else can do.
 
 The relay can run other commands too, and the Windows half of this project adds
-shutdown/restart/sleep buttons. That half is **optional and not installed** —
+shutdown/restart/sleep buttons. That half is **optional and not installed**:
 see `pc/README.md` if you ever want it.
 
 ## The one constraint that shapes everything
@@ -28,7 +28,7 @@ So *something already at home* has to send it. That is the Pi. Everything else i
 the design follows from this single fact.
 
 The mirror image is also true: only a machine that is **already running** can turn
-itself off. So shutdown cannot come from the Pi — it would have to come from the
+itself off. So shutdown cannot come from the Pi: it would have to come from the
 PC itself, which is why that is a separate, optional install.
 
 ```mermaid
@@ -48,7 +48,7 @@ flowchart LR
 
 ## The pieces
 
-### Tailscale — the private network
+### Tailscale: the private network
 
 Tailscale puts your phone, your Pi and your PC on one private network, wherever
 they physically are. Traffic between them is encrypted, and nothing else on the
@@ -58,7 +58,7 @@ to the internet**.
 Practically: every machine gets a `100.x.y.z` address that only your devices can
 reach.
 
-### The relay service (`pi/wakepc.py`) — the thing that does the work
+### The relay service (`pi/wakepc.py`): the thing that does the work
 
 A small Python program, about 500 lines, using nothing but what Python ships
 with. It runs on the Pi, and the *same* program also runs on the Windows PC.
@@ -76,8 +76,8 @@ own. That is the core security idea: even if someone got hold of your phone, the
 could only do the handful of things you already decided were allowed.
 
 **There is no password to set up.** When a request arrives, the relay asks
-Tailscale who sent it. Tailscale addresses cannot be faked — they are tied to
-each device's cryptographic key — so tailscaled can say "that was your phone,
+Tailscale who sent it. Tailscale addresses cannot be faked: they are tied to
+each device's cryptographic key, so tailscaled can say "that was your phone,
 and your phone belongs to you". A device you already trust is therefore
 recognised on sight, and you never type or copy a secret anywhere.
 
@@ -88,9 +88,9 @@ Tailscale command installed, but you should not need it.
 It also serves a small web page (a "panel") you can open in any browser on your
 tailnet, to run the same commands from a computer.
 
-### The Android app (`app/`) — what you actually touch
+### The Android app (`app/`): what you actually touch
 
-Written with **Jetpack Compose** (the modern way to build Android screens — you
+Written with **Jetpack Compose** (the modern way to build Android screens: you
 describe what the screen should look like, and it redraws itself when data
 changes) and **Kotlin**.
 
@@ -98,7 +98,7 @@ Three concepts, and it is worth being precise because they are easy to confuse:
 
 | Concept | What it is | Example |
 | --- | --- | --- |
-| **Connection** | A relay you can reach — an address and a credential | "my pi", "desk pc" |
+| **Connection** | A relay you can reach: an address and a credential | "my pi", "desk pc" |
 | **Machine** | A thing you control, shown as a card | "desk pc" |
 | **Command** | A button on that card, served by some connection | `wake-pc`, `shutdown-pc` |
 
@@ -121,26 +121,26 @@ flowchart TD
 
 ### Confirmation codes
 
-**These are off by default, and a wake-only setup does not need them** — waking
+**These are off by default, and a wake-only setup does not need them**: waking
 a machine cannot hurt anything, so a tap just wakes it. Turn one on if you add
 buttons that do something a mis-tap would regret:
 
-- **Short code (4 digits)** — ordinary commands like waking.
-- **Long code (6 digits)** — anything that disrupts a running machine:
+- **Short code (4 digits)**: ordinary commands like waking.
+- **Long code (6 digits)**: anything that disrupts a running machine:
   shutdown, restart, sleep.
 
 **The relay decides which is which**, because it is the only part that knows what
-a command actually does — a button called "goodnight" that really runs a shutdown
+a command actually does: a button called "goodnight" that really runs a shutdown
 gets the long code regardless of its name. You can override it per command in the
 config.
 
 The long code is checked **in two places**: the app asks you for it, and the
 relay demands it again before running. That second check is what makes it real
-rather than a politeness — without the code, a shutdown request is refused even
+rather than a politeness: without the code, a shutdown request is refused even
 if it reaches the relay.
 
 **Widgets are the exception**, deliberately. A home-screen widget cannot stop and
-ask you for a code mid-tap. So it asks **once, when you place it** — entering the
+ask you for a code mid-tap. So it asks **once, when you place it**: entering the
 code there is how you grant that widget its one-tap power. A widget placed
 without a code refuses to run and says so.
 
@@ -186,13 +186,15 @@ sequenceDiagram
 | `pi/` | The relay service and its Linux installer |
 | `pc/` | Installing the same service on Windows |
 | `design/` | The original design mockups |
-| `docs/` | This guide and the engineering record |
+| `docs/` | This guide, the engineering record, and the README screenshots |
+| `CHANGELOG.md` | What changed in each version |
+| `LICENSE` | The MIT licence: anyone may use, change and share the code, as long as your name and the licence stay with it |
 
 ## Things worth knowing
 
 - **The app never stores a shell command.** All it knows is a list of names.
 - **Status is a real ping**, done by the relay on your LAN, so "awake" means the
-  machine genuinely answered — not that a packet was sent hopefully.
+  machine genuinely answered, not that a packet was sent hopefully.
 - **The console** (tap the `>` line above the main button) lists every request the
   app has made with how long it took, which is the fastest way to see why
   something did not work.
@@ -201,4 +203,4 @@ sequenceDiagram
 - **The relay listens only on its Tailscale address.** A machine on your home
   wifi that is not on the tailnet cannot even open a connection to it.
 - **`wakepc.py status`** on either machine prints its address, who it will let
-  in, and which commands need the code — the quickest way to check a setup.
+  in, and which commands need the code: the quickest way to check a setup.
