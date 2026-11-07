@@ -136,7 +136,7 @@ private fun ChooseButton(
         )
 
         if (current.machines.isEmpty()) {
-            ConsoleText("no machines yet — set one up in the app first", size = 12, color = Palette.dim)
+            ConsoleText("no machines yet: set one up in the app first", size = 12, color = Palette.dim)
             return@Column
         }
 

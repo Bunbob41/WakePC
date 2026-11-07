@@ -31,7 +31,7 @@ fun ConsoleScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             if (lines.isEmpty()) {
-                ConsoleText("nothing yet — every request lands here", size = 11, color = Palette.faint)
+                ConsoleText("nothing yet: every request lands here", size = 11, color = Palette.faint)
             }
             lines.forEach { line ->
                 Row(modifier = Modifier.fillMaxWidth()) {

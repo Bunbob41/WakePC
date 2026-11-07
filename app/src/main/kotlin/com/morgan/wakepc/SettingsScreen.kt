@@ -94,7 +94,7 @@ fun SettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionLabel("CONFIRMATION CODES · OPTIONAL")
                 SettingsRow(
-                    if (state.shortPin.isBlank()) "off — commands run on one tap" else "•".repeat(state.shortPin.length),
+                    if (state.shortPin.isBlank()) "off, commands run on one tap" else "•".repeat(state.shortPin.length),
                     "set one only if you want every command to ask first",
                 ) { settingPin = SHORT_PIN_LENGTH }
                 SettingsRow(
@@ -203,7 +203,7 @@ fun SettingsScreen(
                     }
                 }
                 if (options.isEmpty()) {
-                    ConsoleText("no buttons yet — add a machine first", size = 11, color = Palette.dim)
+                    ConsoleText("no buttons yet: add a machine first", size = 11, color = Palette.dim)
                 }
             }
         }

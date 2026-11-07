@@ -18,7 +18,7 @@ private val whitespace = Regex("\\s+")
 internal const val DEFAULT_CONNECTION_COLOR: Long = 0xFFFF5D49
 
 // Pastes drag invisible extras into single-line fields; keep the plausible part.
-// Also absorb address shorthand: "homepi", "100.64.0.2:8787" and full URLs all work —
+// Also absorb address shorthand: "homepi", "100.64.0.2:8787" and full URLs all work:
 // a missing scheme becomes http:// and a bare host gets the default port.
 fun cleanUrl(raw: String): String {
     val trimmed = raw.trim().takeWhile { !it.isWhitespace() }.trimEnd('/')
@@ -64,7 +64,7 @@ data class CommandRef(
     val name: String,
     val ping: Boolean,
     /**
-     * Which connection serves this command. Null means the machine's own —
+     * Which connection serves this command. Null means the machine's own:
      * how every command looked before a machine could draw from more than
      * one relay, e.g. wake via the Pi and shutdown from the PC itself.
      */

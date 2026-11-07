@@ -329,9 +329,6 @@ widgets.
   tracked files, and placeholders only. (The leak itself is resolved: see the
   history entry above. The user judged the codes not burned, since the repo had
   no stars, forks or watchers and one unique viewer in the exposure window.)
-- **The app's own screen text still contains long dashes** (for example the
-  connection form's hints and the code settings), which the house style now
-  bans. Fixing it means an app release.
 - **Release builds are signed with the debug key.** Fine for sideloading;
   publishing to a store needs a real upload key, and every existing install
   would have to be removed once.

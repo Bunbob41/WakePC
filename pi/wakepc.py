@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Named-command relay for the tailnet.
 
-Commands are defined server-side in /etc/wakepc.conf — the phone can only
+Commands are defined server-side in /etc/wakepc.conf: the phone can only
 invoke them by name, never send shell.
 
 Callers are identified by asking tailscaled who owns the source address
@@ -18,7 +18,7 @@ the tailscale CLI. Endpoints:
     POST /wake, GET /status: legacy 0.1 endpoints, mapped onto the first
     WOL / first ping-able command so old clients keep working.
 
-Stdlib only — no pip installs. See wakepc.conf.example for the config format.
+Stdlib only: no pip installs. See wakepc.conf.example for the config format.
 """
 
 import configparser
@@ -48,7 +48,7 @@ TAILNET_NETS = (
 )
 
 # Commands that interrupt a machine somebody may be using. Used only to pick
-# a default for `confirm` — fail safe, so an unrecognised shell command is
+# a default for `confirm`: fail safe, so an unrecognised shell command is
 # treated as disruptive and the config can relax it.
 DISRUPTIVE_RE = re.compile(
     r"shut ?down|restart|reboot|sleep|suspend|hibernate|logoff|log ?out|poweroff",
@@ -117,7 +117,7 @@ def load_config():
     if any(c.confirm for c in commands.values()) and not confirm_code:
         # Normal for a wake-only setup: the app is then the only gate, and
         # with no code set there is no gate at all. Said once, not as a warning.
-        print("note: no confirm_code set — elevated commands are gated by the app only")
+        print("note: no confirm_code set, so elevated commands are gated by the app only")
 
     return {
         "token": token,
@@ -167,7 +167,7 @@ def own_tailnet_addr():
 
 
 def own_login():
-    """The tailnet account this node belongs to — the default allowed user."""
+    """The tailnet account this node belongs to: the default allowed user."""
     addr = own_tailnet_addr()
     identity = whois_peer(addr) if addr else None
     return identity[0] if identity else None
@@ -312,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         allowed = self.config["allow_users"]
         if allowed and identity[0].lower() not in allowed:
-            print(f"refused {identity[0]} ({identity[1]}) — not in allow_users", flush=True)
+            print(f"refused {identity[0]} ({identity[1]}): not in allow_users", flush=True)
             return None
         return identity
 
@@ -478,7 +478,7 @@ async function init() {
   const info = await res.json();
   enforced = info.confirm_enforced;
   $('login').style.display = 'none'; $('panel').style.display = 'block';
-  if (info.you) $('who').textContent = 'recognised as ' + info.you + ' — no token needed here.';
+  if (info.you) $('who').textContent = 'recognised as ' + info.you + ', no token needed here.';
   $('cmds').innerHTML = info.commands.map((c) => `
     <div class="row">
       <div class="name">${c.name}${c.elevated ? ' <span style="color:#5f6871">· code</span>' : ''}</div>
@@ -548,7 +548,7 @@ def generate_passphrase(words: int) -> str:
 
 
 def advertised_host(config):
-    """The address to hand out — the tailnet one, which every peer can reach."""
+    """The address to hand out: the tailnet one, which every peer can reach."""
     host = config["bind_host"]
     if host in ("", "auto", "0.0.0.0"):
         host = own_tailnet_addr() or socket.gethostname()
@@ -561,10 +561,10 @@ def print_status():
     print(f"address:  {advertised_host(config)}")
     if config["trust_tailnet"] and tailscale_bin():
         allowed = ", ".join(sorted(config["allow_users"])) or (own_login() or "this tailnet")
-        print(f"identity: on — devices belonging to {allowed} need no credential")
+        print(f"identity: on, devices belonging to {allowed} need no credential")
     else:
-        print("identity: off — callers must send the token")
-    print(f"token:    {config['token'] or '(none — identity only)'}")
+        print("identity: off, callers must send the token")
+    print(f"token:    {config['token'] or '(none, identity only)'}")
     print(f"confirm:  {'enforced here' if config['confirm_code'] else 'app-side only'}")
     gated = [n for n, c in config["commands"].items() if c.confirm]
     print(f"commands: {', '.join(config['commands'])}")
@@ -582,11 +582,11 @@ def main():
         # tailnet address to bind to.
         host = own_tailnet_addr() or "0.0.0.0"
         if host == "0.0.0.0":
-            print("warning: no tailnet address found — listening on all interfaces", flush=True)
+            print("warning: no tailnet address found, listening on all interfaces", flush=True)
     server = ThreadingHTTPServer((host, config["port"]), Handler)
     names = ", ".join(config["commands"])
     auth = "tailnet identity" if config["trust_tailnet"] and tailscale_bin() else "token"
-    print(f"wakepc listening on {host}:{config['port']} ({auth}) — commands: {names}", flush=True)
+    print(f"wakepc listening on {host}:{config['port']} ({auth}), commands: {names}", flush=True)
     server.serve_forever()
 
 

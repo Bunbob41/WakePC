@@ -6,6 +6,17 @@ Only the latest has a published APK on the
 The reasoning behind each change lives in
 [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
+## 0.14.0 (2026-11-06)
+
+- Removed the setup QR. Since tokens went away in 0.12.0 it only filled in
+  an address, which is quicker to type. Add a connection by typing the Pi's
+  Tailscale name or address.
+- The app is now fully open source: the QR scanner was its only closed-source
+  part (Google Play services). The APK is about 450 KB smaller.
+- The Pi panel's QR button, the relay's `/qr.png` route and `wakepc.py qr` are gone, and
+  the Pi installer no longer installs `qrencode`.
+- Screen text and relay messages no longer use long dashes.
+
 ## 0.13.0 (2026-09-06)
 
 A scope correction rather than a feature release. Remote desktop tools can

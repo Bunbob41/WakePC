@@ -173,7 +173,7 @@ fun HomeScreen(
             onAccepted = {
                 pending = null
                 // Elevated commands send the code on to the relay, which
-                // checks it again — accepting here is not the last word.
+                // checks it again: accepting here is not the last word.
                 vm.run(p.machine, p.connection, p.command, if (p.command.elevated) p.gate else "")
             },
         )

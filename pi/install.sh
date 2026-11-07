@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install (or update) the wakepc service. Run on the machine that will relay
-# commands — a Pi, a NAS, anything with systemd and python3:
+# commands: a Pi, a NAS, anything with systemd and python3:
 #
 #   sudo ./install.sh
 #
@@ -46,7 +46,7 @@ systemctl enable --now wakepc >/dev/null
 sleep 1
 
 if ! systemctl is-active --quiet wakepc; then
-  echo "error: service failed to start — journalctl -u wakepc -n 20" >&2
+  echo "error: service failed to start, see: journalctl -u wakepc -n 20" >&2
   exit 1
 fi
 

@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Semantic status colour — the UI maps this to the palette, the VM stays colour-free. */
+/** Semantic status colour: the UI maps this to the palette, the VM stays colour-free. */
 enum class Tone { NEUTRAL, ACTIVE, GOOD, BAD }
 
 data class Transient(

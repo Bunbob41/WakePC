@@ -213,7 +213,7 @@ fun ConnectionEditor(
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("TOKEN · USUALLY NOT NEEDED")
-                ConsoleField(token, { token = it }, secret = true, placeholder = "leave empty — the relay knows your device")
+                ConsoleField(token, { token = it }, secret = true, placeholder = "leave empty, the relay knows your device")
             }
             Box(
                 modifier =
@@ -227,7 +227,7 @@ fun ConnectionEditor(
                                 testResult =
                                     WakeApi.fetchCommands(draft()).fold(
                                         onSuccess = { cmds ->
-                                            "ok — found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
+                                            "ok, found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
                                         },
                                         onFailure = { "failed: ${it.message}" to Palette.red },
                                     )
@@ -302,7 +302,7 @@ fun MachineEditor(
     var selected by rememberSaveable(stateSaver = commandsSaver) {
         mutableStateOf<List<CommandRef>>(emptyList())
     }
-    // Commands offered by each connection, so one machine can mix them —
+    // Commands offered by each connection, so one machine can mix them:
     // wake from the Pi, shutdown from the machine itself.
     var offered by remember { mutableStateOf<Map<String, List<CommandRef>>>(emptyMap()) }
     var fetchErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -487,7 +487,7 @@ fun MachineEditor(
                     }
                 }
                 ConsoleText(
-                    "pick from any connection — wake this machine through the pi, " +
+                    "pick from any connection: wake this machine through the pi, " +
                         "shut it down through the machine itself",
                     size = 11,
                     color = Palette.faint,

@@ -74,7 +74,7 @@ object WakeApi : WakeRepository {
                     ping = obj.optBoolean("ping"),
                     // The relay knows what the command actually runs, so it
                     // decides. Only guess from the name for older relays that
-                    // do not say — and guess towards the safer answer.
+                    // do not say, and guess towards the safer answer.
                     elevated = if (obj.has("elevated")) obj.getBoolean("elevated") else looksDisruptive(name),
                 )
             }
@@ -163,7 +163,7 @@ private const val HTTP_FORBIDDEN = 403
 /** HTTP codes the relay uses deliberately, said in words the console can show. */
 private fun explain(code: Int): String =
     when (code) {
-        HTTP_UNAUTHORIZED -> "this relay doesn't recognise you — check it can see your device on the tailnet"
+        HTTP_UNAUTHORIZED -> "this relay doesn't recognise you: check it can see your device on the tailnet"
         HTTP_FORBIDDEN -> "wrong confirmation code"
         else -> "HTTP $code"
     }
@@ -176,11 +176,11 @@ private fun explain(code: Int): String =
 private fun describe(failure: Throwable?): String =
     when (failure) {
         is java.net.UnknownHostException -> {
-            "can't resolve that name — check it, or use the IP"
+            "can't resolve that name: check it, or use the IP"
         }
 
         is java.net.SocketTimeoutException -> {
-            "timed out — is the machine awake and on the tailnet?"
+            "timed out: is the machine awake and on the tailnet?"
         }
 
         null -> {

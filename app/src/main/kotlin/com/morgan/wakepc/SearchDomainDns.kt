@@ -10,7 +10,7 @@ import java.net.UnknownHostException
  * Resolves bare hostnames the way a desktop does.
  *
  * Tailscale publishes its MagicDNS suffix as a search domain on the VPN
- * network, but Android never applies search domains to an app's own lookups —
+ * network, but Android never applies search domains to an app's own lookups:
  * so "mypi" resolves from a laptop and fails from the phone, while
  * "mypi.tailnet.ts.net" works on both. This reads the suffix off the live
  * network and appends it when a dotless name fails, so the short name people

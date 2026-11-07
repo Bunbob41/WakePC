@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 class WakeTileService : TileService() {
     // The QS panel can unbind this service at any time; the scope dies with it,
-    // which at worst cuts the status polling short — the command already ran.
+    // which at worst cuts the status polling short: the command already ran.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onStartListening() {
@@ -63,7 +63,7 @@ class WakeTileService : TileService() {
                     return@launch
                 }
             }
-            updateTile(subtitle = "Sent — no ping yet", state = Tile.STATE_INACTIVE)
+            updateTile(subtitle = "Sent, no ping yet", state = Tile.STATE_INACTIVE)
         }
     }
 

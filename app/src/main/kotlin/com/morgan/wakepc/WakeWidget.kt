@@ -364,7 +364,7 @@ private fun MachineRow(
             style = console(13, Palette.text),
             modifier = GlanceModifier.defaultWeight(),
         )
-        Text(status.ifBlank { "—" }, style = console(9, statusColor(status)))
+        Text(status.ifBlank { "-" }, style = console(9, statusColor(status)))
     }
 }
 
