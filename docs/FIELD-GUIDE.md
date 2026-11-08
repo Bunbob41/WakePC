@@ -193,6 +193,9 @@ sequenceDiagram
 ## Things worth knowing
 
 - **The app never stores a shell command.** All it knows is a list of names.
+- **Every piece of text is checked for readability.** A test fails the build if
+  any text colour is too faint against the dark background, or any text is
+  smaller than 11 point.
 - **Everything in the app is open source.** It used to include one closed piece
   from Google, a QR scanner for setting up a connection. Once passwords went
   away the QR only saved typing an address, so it was removed.

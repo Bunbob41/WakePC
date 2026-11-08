@@ -6,6 +6,15 @@ Only the latest has a published APK on the
 The reasoning behind each change lives in
 [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
+## 0.14.1 (2026-11-07)
+
+- Easier to read. The two darkest greys were lightened: the request line above
+  the main button and "via <relay>" under each machine went from 1.9 to 1 contrast
+  against the background to 4.9 to 1, and the next grey up from 3.4 to 1 to 6.1 to 1.
+  Both now meet the usual 4.5 to 1 minimum for text.
+- No text is smaller than 11 point. The request line and "via <relay>" are 12.
+- The same applies to the home screen widgets.
+
 ## 0.14.0 (2026-11-06)
 
 - Removed the setup QR. Since tokens went away in 0.12.0 it only filled in

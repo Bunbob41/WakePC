@@ -169,7 +169,7 @@ private fun ChooseButton(
                         ConsoleText(machine.name.ifBlank { "unnamed" }, size = 14, weight = FontWeight.Medium)
                         ConsoleText(
                             "${command.name} · via ${connection?.name ?: "?"}",
-                            size = 10,
+                            size = 11,
                             color = Palette.dim,
                         )
                     }

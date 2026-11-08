@@ -168,12 +168,12 @@ private fun WidgetBody(appState: AppState) {
                 Spacer(GlanceModifier.width(8.dp))
                 Text(
                     "WAKEPC",
-                    style = console(10, Palette.text, FontWeight.Bold),
+                    style = console(11, Palette.text, FontWeight.Bold),
                     modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>()),
                 )
                 Text(
                     "refresh",
-                    style = console(9, Palette.dim),
+                    style = console(11, Palette.dim),
                     modifier = GlanceModifier.clickable(actionRunCallback<RefreshAction>()),
                 )
             }
@@ -262,7 +262,7 @@ private fun HeroButton(
                     style = console(14, Palette.text, FontWeight.Bold),
                     modifier = GlanceModifier.defaultWeight(),
                 )
-                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+                Text(status.ifBlank { "tap" }, style = console(11, statusColor(status)))
             }
         }
 
@@ -288,7 +288,7 @@ private fun HeroButton(
                 }
                 Spacer(GlanceModifier.height(6.dp))
                 Text(label, style = console(12, Palette.text, FontWeight.Bold))
-                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+                Text(status.ifBlank { "tap" }, style = console(11, statusColor(status)))
             }
         }
 
@@ -315,7 +315,7 @@ private fun HeroButton(
                     style = console(15, Palette.text, FontWeight.Bold),
                     modifier = GlanceModifier.defaultWeight(),
                 )
-                Text(status.ifBlank { "tap" }, style = console(10, statusColor(status)))
+                Text(status.ifBlank { "tap" }, style = console(11, statusColor(status)))
             }
         }
     }
@@ -364,7 +364,7 @@ private fun MachineRow(
             style = console(13, Palette.text),
             modifier = GlanceModifier.defaultWeight(),
         )
-        Text(status.ifBlank { "-" }, style = console(9, statusColor(status)))
+        Text(status.ifBlank { "-" }, style = console(11, statusColor(status)))
     }
 }
 

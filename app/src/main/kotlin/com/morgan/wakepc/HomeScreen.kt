@@ -144,7 +144,7 @@ fun HomeScreen(
             ) {
                 ConsoleText(
                     "> ${last.text}",
-                    size = 10,
+                    size = 12,
                     color = if (last.ok == false) Palette.red else Palette.faint,
                     maxLines = 1,
                 )
@@ -248,7 +248,7 @@ private fun MachineCard(
         }
         ConsoleText(
             "via ${connection?.name ?: "missing connection"}",
-            size = 10,
+            size = 12,
             color = Palette.faint,
             modifier = Modifier.padding(start = 26.dp, top = 2.dp),
         )
@@ -323,7 +323,7 @@ private fun HeroButton(
                     )
                     ConsoleText(
                         "${resolved.command.name} · via ${resolved.connection.name}",
-                        size = 10,
+                        size = 11,
                         color = Palette.dim,
                         modifier = Modifier.padding(top = 3.dp),
                     )

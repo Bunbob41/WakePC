@@ -414,7 +414,7 @@ fun MachineEditor(
                         modifier = Modifier.padding(top = 6.dp),
                     ) {
                         Box(modifier = Modifier.size(8.dp).background(Color(conn.color), CircleShape))
-                        ConsoleText(conn.name.uppercase(), size = 10, color = Palette.dim, letterSpacing = 2.0)
+                        ConsoleText(conn.name.uppercase(), size = 11, color = Palette.dim, letterSpacing = 2.0)
                     }
                     if (error != null) {
                         ConsoleText("couldn't reach: $error", size = 11, color = Palette.red)
@@ -459,13 +459,13 @@ fun MachineEditor(
                                 modifier = Modifier.padding(start = 12.dp).weight(1f),
                             )
                             if (cmd.ping) {
-                                ConsoleText("PING", size = 9, color = Palette.green, letterSpacing = 1.5)
+                                ConsoleText("PING", size = 11, color = Palette.green, letterSpacing = 1.5)
                             }
                             if (isSel) {
                                 val picked = selected.first { it.name == cmd.name && it.connectionId == cmd.connectionId }
                                 ConsoleText(
                                     if (picked.elevated) "LONG CODE" else "SHORT CODE",
-                                    size = 9,
+                                    size = 11,
                                     color = if (picked.elevated) Palette.amber else Palette.dim,
                                     letterSpacing = 1.5,
                                     modifier =

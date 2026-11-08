@@ -141,7 +141,7 @@ fun SettingsScreen(
         ) {
             ConsoleText(
                 "wakepc ${BuildConfig.VERSION_NAME} · talks only to your tailnet",
-                size = 10,
+                size = 11,
                 color = Palette.faint,
             )
         }
@@ -229,7 +229,7 @@ private fun SettingsRow(
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ConsoleText(value, size = 13)
             if (hint != null) {
-                ConsoleText(hint, size = 10, color = Palette.dim)
+                ConsoleText(hint, size = 11, color = Palette.dim)
             }
         }
         TintedIcon(R.drawable.ic_chevron, Palette.faint, size = 14.dp)

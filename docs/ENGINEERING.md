@@ -48,6 +48,25 @@ can never supply a shell string.
 
 Newest first. Each entry: the decision, why, and what it replaced.
 
+### Readable greys and a minimum text size (0.14.1)
+
+`Palette.faint` went from `#3A434C` to `#7C858E` and `Palette.dim` from
+`#5F6871` to `#8D969F`. Every 9 and 10 sp text became 11 sp, and the home
+screen's request line and "via <relay>" became 12 sp.
+
+*Why:* the user found the request line above the main button hard to read. It
+was 10 sp in `faint`, at 1.9 to 1 against the background; `dim` was 3.4 to 1.
+WCAG AA asks for 4.5 to 1 for body text. Contrast against the darkest text
+surface (`selBg`) is now 4.9 to 1 for `faint` and 6.1 to 1 for `dim`, and the
+steps `text` > `sub` > `dim` > `faint` are kept, so ASLEEP still reads dimmer
+than AWAKE. **Replaced:** a broader redesign, which was considered and not
+done: the layout itself was not the complaint.
+
+*Guards:* `ReadabilityTest` checks every text colour against every text
+surface, that the greys still step down, and scans the sources for any text
+size under 11 sp (it also fails if it finds fewer than 30 sizes, so an empty
+scan cannot pass).
+
 ### The setup QR is gone, and the app is fully open source (0.14.0)
 
 Removed the "scan setup qr" button, the Pi panel's QR, the relay's `/qr.png`

@@ -53,8 +53,8 @@ object Palette {
     val hairline = Color(0xFF14181C)
     val text = Color(0xFFE6E3DC)
     val sub = Color(0xFFAAB2B9)
-    val dim = Color(0xFF5F6871)
-    val faint = Color(0xFF3A434C)
+    val dim = Color(0xFF8D969F)
+    val faint = Color(0xFF7C858E)
     val red = Color(0xFFFF5D49)
     val green = Color(0xFF45D06D)
     val amber = Color(0xFFE2A63D)
@@ -118,7 +118,7 @@ fun StatusText(
     androidx.compose.material3.Text(
         text = text,
         color = color,
-        fontSize = 10.sp,
+        fontSize = 11.sp,
         fontFamily = Mono,
         letterSpacing = 1.5.sp,
         style =
@@ -156,7 +156,7 @@ fun ConsoleText(
 
 @Composable
 fun SectionLabel(text: String) {
-    ConsoleText(text, size = 10, color = Palette.dim, letterSpacing = 2.0)
+    ConsoleText(text, size = 11, color = Palette.dim, letterSpacing = 2.0)
 }
 
 @Composable
@@ -200,7 +200,7 @@ fun ConsoleField(
                 if (secret) {
                     ConsoleText(
                         if (reveal) "hide" else "show",
-                        size = 10,
+                        size = 11,
                         color = Palette.dim,
                         letterSpacing = 1.5,
                         modifier =

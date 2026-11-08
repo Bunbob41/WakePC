@@ -14,8 +14,8 @@ android {
         minSdk = 31
         // 36 is what the S26 Ultra actually runs, matching the chat app's choice.
         targetSdk = 36
-        versionCode = 28
-        versionName = "0.14.0"
+        versionCode = 29
+        versionName = "0.14.1"
     }
 
     buildTypes {

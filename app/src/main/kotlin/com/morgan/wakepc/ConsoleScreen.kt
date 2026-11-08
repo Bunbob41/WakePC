@@ -35,7 +35,7 @@ fun ConsoleScreen(onBack: () -> Unit) {
             }
             lines.forEach { line ->
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    ConsoleText(line.timestamp(), size = 10, color = Palette.faint)
+                    ConsoleText(line.timestamp(), size = 11, color = Palette.faint)
                     ConsoleText(
                         line.text,
                         size = 11,
