@@ -6,6 +6,17 @@ Only the latest has a published APK on the
 The reasoning behind each change lives in
 [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
+## 0.15.0 (2026-11-08)
+
+- READY. A PC answers ping long before you can use it. Add `ready = 445` (or
+  any port that only opens once the machine is usable) to a command on the Pi,
+  and the app, widgets, tile and Pi panel show UP while it is still starting
+  and READY once that port answers. A wake keeps waiting until READY.
+- Without `ready` nothing changes: you still see AWAKE.
+- The Quick Settings tile now waits up to 90 seconds, like the app.
+- The Pi panel's dim text uses the same readable greys as the app.
+- The relay's `status` command lists which commands check a port.
+
 ## 0.14.1 (2026-11-07)
 
 - Easier to read. The two darkest greys were lightened: the request line above

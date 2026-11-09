@@ -370,7 +370,7 @@ private fun MachineRow(
 
 private fun statusColor(status: String) =
     when {
-        status.startsWith("AWAKE") || status == "OK" -> Palette.green
+        status.startsWith("AWAKE") || status.startsWith("READY") || status == "OK" -> Palette.green
         status == "FAILED" || status == "NOT AUTHORISED" -> Palette.red
         status == "ASLEEP" || status.isBlank() -> Palette.faint
         else -> Palette.amber
@@ -425,8 +425,8 @@ class RunAction : ActionCallback {
                 // so look once and leave the rest to refresh.
                 setStatus(context, glanceId, machineId, "SENT")
                 delay(QUICK_LOOK_MS)
-                val awake = WakeApi.status(target.connection, target.command.name).getOrDefault(false)
-                setStatus(context, glanceId, machineId, if (awake) "AWAKE" else "SENT")
+                val now = WakeApi.status(target.connection, target.command.name).getOrNull()
+                setStatus(context, glanceId, machineId, if (now == null || now == Readiness.ASLEEP) "SENT" else now.name)
             }
         }
     }
@@ -447,17 +447,18 @@ class RefreshAction : ActionCallback {
         state.machines.forEach { machine ->
             val ping = machine.commands.firstOrNull { it.ping } ?: return@forEach
             val connection = state.connectionFor(machine, ping) ?: return@forEach
-            val stats = WakeApi.stats(connection, ping.name).getOrNull()
-            val label =
-                when {
-                    stats == null -> "?"
-                    stats.awake -> "AWAKE " + fmtMs(stats.avgMs ?: 0.0) + "MS"
-                    else -> "ASLEEP"
-                }
-            setStatus(context, glanceId, machine.id, label)
+            setStatus(context, glanceId, machine.id, widgetLabel(WakeApi.stats(connection, ping.name).getOrNull()))
         }
     }
 }
+
+/** A refresh result as the widget shows it: READY, UP or AWAKE with the ping time, or ASLEEP. */
+internal fun widgetLabel(stats: PingStats?): String =
+    when {
+        stats == null -> "?"
+        !stats.awake -> "ASLEEP"
+        else -> stats.readiness.name + " " + fmtMs(stats.avgMs ?: 0.0) + "MS"
+    }
 
 private suspend fun setStatus(
     context: Context,

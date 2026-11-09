@@ -23,12 +23,17 @@ trust_tailnet = yes
 bind_host = auto
 port = 8787
 
-# Each [command:<name>] becomes a button the app can invoke — by name only,
+# Each [command:<name>] becomes a button the app can invoke by name only;
 # the phone can never send shell. Two run kinds:
 #   run = WOL <mac>        broadcast a wake-on-lan magic packet
 #   run = shell <cmdline>  run a shell command as the wakepc user
 # Optional per command:
 #   ping = <ip>            lets the app show awake/asleep for this command
+#   ready = <port>         a TCP port on the ping address that only answers
+#                          once the machine is usable. The app then shows UP
+#                          while it pings but the port is shut, and READY once
+#                          the port answers. 445 (Windows file sharing) suits
+#                          most Windows PCs; it opens after ping does.
 #   broadcast_ip = <ip>    WOL only; default 255.255.255.255
 #   confirm = yes|no       require the confirmation code. Defaults to yes for
 #                          anything that looks like it interrupts a running
@@ -38,6 +43,7 @@ port = 8787
 [command:wake-pc]
 run = WOL AA:BB:CC:DD:EE:FF
 ping = 192.168.1.50
+ready = 445
 broadcast_ip = 192.168.1.255
 
 # Shell commands run as the unprivileged wakepc user. For privileged ones,

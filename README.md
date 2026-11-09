@@ -37,6 +37,9 @@ flowchart LR
   tile.
 - **Real status.** The Pi pings the machine, so "awake" means it actually
   answered, with the response time.
+- **Knows when it is usable.** A PC answers ping early in its boot. Name a port
+  that opens later (`ready = 445` for Windows file sharing) and the app shows
+  UP while it is still starting and READY once you can use it.
 - **No passwords.** The relay asks Tailscale which device is calling, so your
   phone is recognised automatically.
 - **Several machines**, each with its own card, plus widgets in four sizes.

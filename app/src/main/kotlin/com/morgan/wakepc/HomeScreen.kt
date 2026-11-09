@@ -107,7 +107,7 @@ fun HomeScreen(
                     machine = machine,
                     connection = connection,
                     transient = rt.transient,
-                    awake = if (pingCmd != null) rt.awake else null,
+                    readiness = if (pingCmd != null) rt.readiness else null,
                     avgMs = if (pingCmd != null) rt.avgMs else null,
                     runningCommand = rt.running,
                     onRun = { cmd -> attempt(machine, cmd) },
@@ -158,7 +158,7 @@ fun HomeScreen(
                 style = state.heroStyle,
                 resolved = hero,
                 transient = rt.transient,
-                awake = if (hero.command.ping) rt.awake else null,
+                readiness = if (hero.command.ping) rt.readiness else null,
                 onRun = { attempt(hero.machine, hero.command) },
             )
         }
@@ -194,7 +194,7 @@ private fun MachineCard(
     machine: Machine,
     connection: Connection?,
     transient: Transient?,
-    awake: Boolean?,
+    readiness: Readiness?,
     avgMs: Double?,
     runningCommand: String?,
     onRun: (CommandRef) -> Unit,
@@ -232,16 +232,9 @@ private fun MachineCard(
                         StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
                     }
 
-                    awake == true -> {
-                        StatusText(
-                            "AWAKE" + (avgMs?.let { " · ${fmtMs(it)}MS" } ?: ""),
-                            Palette.green,
-                            glow = true,
-                        )
-                    }
-
-                    awake == false -> {
-                        StatusText("ASLEEP", Palette.faint)
+                    readiness != null -> {
+                        val ms = if (readiness == Readiness.ASLEEP) "" else avgMs?.let { " · ${fmtMs(it)}MS" } ?: ""
+                        StatusText(readiness.name + ms, readiness.color(), glow = readiness != Readiness.ASLEEP)
                     }
                 }
             }
@@ -289,7 +282,7 @@ private fun HeroButton(
     style: HeroStyle,
     resolved: ResolvedButton,
     transient: Transient?,
-    awake: Boolean?,
+    readiness: Readiness?,
     onRun: () -> Unit,
 ) {
     when (style) {
@@ -328,7 +321,7 @@ private fun HeroButton(
                         modifier = Modifier.padding(top = 3.dp),
                     )
                 }
-                HeroStatus(transient, awake)
+                HeroStatus(transient, readiness)
             }
         }
 
@@ -360,7 +353,7 @@ private fun HeroButton(
                         )
                     }
                 }
-                Box(modifier = Modifier.padding(top = 14.dp)) { HeroStatus(transient, awake) }
+                Box(modifier = Modifier.padding(top = 14.dp)) { HeroStatus(transient, readiness) }
             }
         }
 
@@ -391,11 +384,18 @@ private fun HeroButton(
 @Composable
 private fun HeroStatus(
     transient: Transient?,
-    awake: Boolean?,
+    readiness: Readiness?,
 ) {
     when {
         transient != null -> StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
-        awake == true -> StatusText("AWAKE", Palette.green, glow = true)
-        awake == false -> StatusText("ASLEEP", Palette.faint)
+        readiness != null -> StatusText(readiness.name, readiness.color(), glow = readiness != Readiness.ASLEEP)
     }
 }
+
+/** UP is still starting, so it shares the amber of anything in progress. */
+private fun Readiness.color(): Color =
+    when (this) {
+        Readiness.READY, Readiness.AWAKE -> Palette.green
+        Readiness.UP -> Palette.amber
+        Readiness.ASLEEP -> Palette.faint
+    }

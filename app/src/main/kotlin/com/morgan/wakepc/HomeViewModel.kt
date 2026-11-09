@@ -30,7 +30,11 @@ data class MachineRuntime(
     val awake: Boolean? = null,
     val avgMs: Double? = null,
     val running: String? = null,
-)
+    /** The relay's ready port answers; null when it has none to check. See [Readiness]. */
+    val ready: Boolean? = null,
+) {
+    val readiness: Readiness? get() = readinessOf(awake, ready)
+}
 
 /**
  * Owns everything that must outlive a screen rotation: the background status
@@ -68,7 +72,7 @@ class HomeViewModel(
             val connection = state.value.connectionFor(machine, pingCmd) ?: return@forEach
             if (_runtime.value[machine.id]?.running != null) return@forEach
             api.stats(connection, pingCmd.name).onSuccess { stats ->
-                update(machine.id) { it.copy(awake = stats.awake, avgMs = stats.avgMs ?: it.avgMs) }
+                update(machine.id) { it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs) }
             }
         }
     }
@@ -109,17 +113,28 @@ class HomeViewModel(
             flash(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false, holdMs = 3_000)
             return
         }
+        // Answering ping is not the end when the relay checks a ready port: a
+        // machine that is UP is still starting, so keep waiting for READY.
+        var last: Readiness? = null
         repeat(WAKE_ATTEMPTS) { attempt ->
             delay(POLL_STEP_MS)
             val secs = (attempt + 1) * (POLL_STEP_MS / MS_PER_SECOND).toInt()
             val clock = "${secs / SECONDS_PER_MINUTE}:${(secs % SECONDS_PER_MINUTE).toString().padStart(2, '0')}"
-            setTransient(machine.id, "WAKING · $clock", Tone.ACTIVE, pulse = true, glow = true)
-            if (api.status(connection, command.name).getOrDefault(false)) {
-                update(machine.id) { it.copy(awake = true, transient = null) }
+            val now = api.status(connection, command.name).getOrNull()
+            if (now != null) last = now
+            if (now?.usable == true) {
+                update(machine.id) { it.copy(awake = true, ready = now.readyFlag, transient = null) }
                 return
             }
+            val word = if (now == Readiness.UP) "UP" else "WAKING"
+            setTransient(machine.id, "$word · $clock", Tone.ACTIVE, pulse = true, glow = true)
         }
-        flash(machine.id, "NO REPLY YET", Tone.NEUTRAL, glow = false, holdMs = 4_000)
+        if (last == Readiness.UP) {
+            update(machine.id) { it.copy(awake = true, ready = false) }
+            flash(machine.id, "UP · NOT READY YET", Tone.ACTIVE, glow = false, holdMs = 4_000)
+        } else {
+            flash(machine.id, "NO REPLY YET", Tone.NEUTRAL, glow = false, holdMs = 4_000)
+        }
     }
 
     private suspend fun runFireAndForget(
@@ -144,7 +159,7 @@ class HomeViewModel(
             setTransient(machine.id, "PROBING · 5 PINGS", Tone.ACTIVE, pulse = true, glow = true)
             api.stats(connection, command.name, count = 5).fold(
                 onSuccess = { stats ->
-                    update(machine.id) { it.copy(awake = stats.awake, avgMs = stats.avgMs ?: it.avgMs) }
+                    update(machine.id) { it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs) }
                     val text =
                         stats.avgMs?.let { avg ->
                             "${fmtMs(stats.minMs ?: avg)}/${fmtMs(avg)}/${fmtMs(stats.maxMs ?: avg)}MS · " +

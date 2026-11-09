@@ -1,8 +1,10 @@
 package com.morgan.wakepc
 
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -132,7 +134,71 @@ class HomeViewModelTest {
             advanceUntilIdle()
         }
 
+    @Test
+    fun `a wake keeps waiting through UP until the ready port answers`() =
+        runTest(dispatcher) {
+            val fake =
+                FakeWakeRepository().apply {
+                    statsQueue.addAll(listOf(asleep(), up(), up(), ready()))
+                }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertEquals("stopped polling at the wrong point", 4, fake.statsCalls)
+            assertEquals(Readiness.READY, vm.runtime.value["m1"]?.readiness)
+            assertNull(vm.runtime.value["m1"]?.transient)
+        }
+
+    @Test
+    fun `a machine that never gets past UP ends up but not ready`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { statsResult = Result.success(up()) }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertEquals("should poll the whole window", 30, fake.statsCalls)
+            assertEquals(Readiness.UP, vm.runtime.value["m1"]?.readiness)
+            assertNull(vm.runtime.value["m1"]?.running)
+        }
+
+    @Test
+    fun `a relay with no ready port finishes at the first ping, as before`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { statsQueue.addAll(listOf(asleep(), awakeOnly())) }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            advanceUntilIdle()
+
+            assertEquals(2, fake.statsCalls)
+            assertEquals(Readiness.AWAKE, vm.runtime.value["m1"]?.readiness)
+        }
+
+    @Test
+    fun `the background poll records readiness`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { statsResult = Result.success(up()) }
+            val vm = viewModel(fake)
+
+            vm.startPolling()
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(Readiness.UP, vm.runtime.value["m1"]?.readiness)
+            // The poll never ends by itself; left running, it keeps the test alive.
+            vm.viewModelScope.cancel()
+        }
+
     private fun asleep() = PingStats(awake = false, lossPct = 100.0, minMs = null, avgMs = null, maxMs = null)
+
+    private fun up() = PingStats(awake = true, lossPct = 0.0, minMs = 1.0, avgMs = 2.0, maxMs = 3.0, ready = false)
+
+    private fun ready() = up().copy(ready = true)
+
+    private fun awakeOnly() = up().copy(ready = null)
 }
 
 private class FakeWakeRepository : WakeRepository {
@@ -141,6 +207,10 @@ private class FakeWakeRepository : WakeRepository {
     var runResult: Result<Unit> = Result.success(Unit)
     var statsResult: Result<PingStats> = Result.success(PingStats(true, 0.0, 1.0, 2.0, 3.0))
     var runGate: CompletableDeferred<Unit>? = null
+
+    /** Replies handed out one per status call before falling back to [statsResult]. */
+    val statsQueue = ArrayDeque<PingStats>()
+    var statsCalls = 0
 
     override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> = Result.success(emptyList())
 
@@ -155,14 +225,12 @@ private class FakeWakeRepository : WakeRepository {
         return runResult
     }
 
-    override suspend fun status(
-        connection: Connection,
-        command: String,
-    ): Result<Boolean> = statsResult.map { it.awake }
-
     override suspend fun stats(
         connection: Connection,
         command: String,
         count: Int,
-    ): Result<PingStats> = statsResult
+    ): Result<PingStats> {
+        statsCalls++
+        return statsQueue.removeFirstOrNull()?.let { Result.success(it) } ?: statsResult
+    }
 }

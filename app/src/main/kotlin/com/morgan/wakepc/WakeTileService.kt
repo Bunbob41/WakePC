@@ -23,10 +23,11 @@ class WakeTileService : TileService() {
             val target = tileTarget()
             if (target == null) {
                 updateTile(subtitle = "Tap to set up", state = Tile.STATE_INACTIVE)
-            } else if (target.command.ping &&
-                WakeApi.status(target.connection, target.command.name).getOrDefault(false)
-            ) {
-                updateTile(subtitle = "${target.machine.name} awake", state = Tile.STATE_ACTIVE)
+            } else if (target.command.ping) {
+                val now = WakeApi.status(target.connection, target.command.name).getOrNull()
+                if (now != null && now != Readiness.ASLEEP) {
+                    updateTile(subtitle = tileSubtitle(target.machine.name, now), state = Tile.STATE_ACTIVE)
+                }
             }
         }
     }
@@ -56,14 +57,23 @@ class WakeTileService : TileService() {
                 updateTile(subtitle = "Done", state = Tile.STATE_ACTIVE)
                 return@launch
             }
+            var last: Readiness? = null
             repeat(POLL_ATTEMPTS) {
                 delay(POLL_INTERVAL_MS)
-                if (WakeApi.status(target.connection, target.command.name).getOrDefault(false)) {
-                    updateTile(subtitle = "${target.machine.name} awake", state = Tile.STATE_ACTIVE)
+                val now = WakeApi.status(target.connection, target.command.name).getOrNull() ?: return@repeat
+                last = now
+                if (now.usable) {
+                    updateTile(subtitle = tileSubtitle(target.machine.name, now), state = Tile.STATE_ACTIVE)
                     return@launch
                 }
+                if (now == Readiness.UP) {
+                    updateTile(subtitle = tileSubtitle(target.machine.name, now), state = Tile.STATE_ACTIVE)
+                }
             }
-            updateTile(subtitle = "Sent, no ping yet", state = Tile.STATE_INACTIVE)
+            updateTile(
+                subtitle = if (last == Readiness.UP) "${target.machine.name} up, not ready yet" else "Sent, no ping yet",
+                state = Tile.STATE_INACTIVE,
+            )
         }
     }
 
@@ -103,7 +113,19 @@ class WakeTileService : TileService() {
     }
 
     private companion object {
-        const val POLL_ATTEMPTS = 8
+        // 90 seconds, as in the app: a PC is UP well before it is READY.
+        const val POLL_ATTEMPTS = 18
         const val POLL_INTERVAL_MS = 5_000L
     }
 }
+
+internal fun tileSubtitle(
+    machine: String,
+    readiness: Readiness,
+): String =
+    when (readiness) {
+        Readiness.READY -> "$machine ready"
+        Readiness.UP -> "$machine starting up"
+        Readiness.AWAKE -> "$machine awake"
+        Readiness.ASLEEP -> "$machine asleep"
+    }

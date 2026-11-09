@@ -14,7 +14,25 @@ data class PingStats(
     val minMs: Double?,
     val avgMs: Double?,
     val maxMs: Double?,
+    /** Whether the relay's ready port answers; null when it has none to check. */
+    val ready: Boolean? = null,
 )
+
+/** Reads a /status reply. A relay without a ready port sends no `ready`, so it stays null. */
+internal fun parseStats(body: String): PingStats {
+    val obj = JSONObject(body)
+    val awake = obj.getBoolean("awake")
+    return PingStats(
+        awake = awake,
+        lossPct = obj.optDouble("loss_pct", if (awake) 0.0 else FULL_LOSS_PCT),
+        minMs = obj.optDouble("min_ms").takeIf { !it.isNaN() },
+        avgMs = obj.optDouble("avg_ms").takeIf { !it.isNaN() },
+        maxMs = obj.optDouble("max_ms").takeIf { !it.isNaN() },
+        ready = if (obj.has("ready")) obj.getBoolean("ready") else null,
+    )
+}
+
+private const val FULL_LOSS_PCT = 100.0
 
 /** The network seam: everything the app asks of a connection. Faked in tests. */
 interface WakeRepository {
@@ -26,11 +44,6 @@ interface WakeRepository {
         confirmCode: String = "",
     ): Result<Unit>
 
-    suspend fun status(
-        connection: Connection,
-        command: String,
-    ): Result<Boolean>
-
     suspend fun stats(
         connection: Connection,
         command: String,
@@ -39,8 +52,6 @@ interface WakeRepository {
 }
 
 object WakeApi : WakeRepository {
-    private const val FULL_LOSS_PCT = 100.0
-
     // Set once from Application; without it we simply resolve as before.
     @Volatile private var appContext: android.content.Context? = null
 
@@ -86,28 +97,13 @@ object WakeApi : WakeRepository {
         confirmCode: String,
     ): Result<Unit> = request(connection, "run/$command", post = true, confirmCode = confirmCode).map { }
 
-    override suspend fun status(
-        connection: Connection,
-        command: String,
-    ): Result<Boolean> = stats(connection, command, count = 1).map { it.awake }
-
     override suspend fun stats(
         connection: Connection,
         command: String,
         count: Int,
     ): Result<PingStats> =
         request(connection, "status/$command?count=$count", post = false, probe = count > 1)
-            .map { body ->
-                val obj = JSONObject(body)
-                val awake = obj.getBoolean("awake")
-                PingStats(
-                    awake = awake,
-                    lossPct = obj.optDouble("loss_pct", if (awake) 0.0 else FULL_LOSS_PCT),
-                    minMs = obj.optDouble("min_ms").takeIf { !it.isNaN() },
-                    avgMs = obj.optDouble("avg_ms").takeIf { !it.isNaN() },
-                    maxMs = obj.optDouble("max_ms").takeIf { !it.isNaN() },
-                )
-            }
+            .map(::parseStats)
 
     /** Tries the primary address, then the fallback; logs the outcome to the console. */
     private suspend fun request(

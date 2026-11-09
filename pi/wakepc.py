@@ -13,7 +13,8 @@ the tailscale CLI. Endpoints:
                                            "elevated": false}]}
     POST /run/<name>     -> run that command; commands marked `confirm` also
                             require the header X-WakePC-Confirm: <code>
-    GET  /status/<name>  -> {"awake": bool} for commands that define a ping ip
+    GET  /status/<name>  -> {"awake": bool} for commands that define a ping ip,
+                            plus "ready": bool when they also name a ready port
 
     POST /wake, GET /status: legacy 0.1 endpoints, mapped onto the first
     WOL / first ping-able command so old clients keep working.
@@ -57,10 +58,13 @@ DISRUPTIVE_RE = re.compile(
 
 
 class Command:
-    def __init__(self, name, run, ping, broadcast_ip, confirm):
+    def __init__(self, name, run, ping, broadcast_ip, confirm, ready=None):
         self.name = name
         self.run = run  # ("wol", mac) or ("shell", cmdline)
         self.ping = ping
+        # A TCP port on the ping address that only answers once the machine is
+        # usable, not just powered: ping comes back early in a boot.
+        self.ready = ready
         self.broadcast_ip = broadcast_ip
         self.confirm = confirm  # needs the confirmation code as well as identity
 
@@ -103,12 +107,22 @@ def load_config():
         # A WOL packet can only ever turn something on, so it is never
         # disruptive; anything else is, until the config says otherwise.
         default_confirm = run[0] == "shell" and bool(DISRUPTIVE_RE.search(raw))
+        ping = parser[section].get("ping", "").strip() or None
+        ready_raw = parser[section].get("ready", "").strip()
+        ready = None
+        if ready_raw:
+            if not ready_raw.isdigit() or not 1 <= int(ready_raw) <= 65535:
+                sys.exit(f"error: [{section}] ready must be a TCP port number, 1 to 65535")
+            if ping is None:
+                sys.exit(f"error: [{section}] ready needs a ping address to check the port on")
+            ready = int(ready_raw)
         commands[name] = Command(
             name=name,
             run=run,
-            ping=parser[section].get("ping", "").strip() or None,
+            ping=ping,
             broadcast_ip=parser[section].get("broadcast_ip", "255.255.255.255"),
             confirm=parser[section].getboolean("confirm", default_confirm),
+            ready=ready,
         )
     if not commands:
         sys.exit("error: no [command:*] sections defined")
@@ -252,6 +266,25 @@ def probe_ping(ip: str, count: int) -> dict:
     return body
 
 
+def probe_port(ip: str, port: int, timeout: float = 1.0) -> bool:
+    """True if something accepts a TCP connection on ip:port within `timeout`."""
+    try:
+        with socket.create_connection((ip, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def probe_status(cmd: Command, count: int) -> dict:
+    """Ping stats, plus whether the ready port answers when the command has one.
+    An asleep machine is never ready, and its port is not tried, which would
+    only add a timeout to every poll of a sleeping machine."""
+    body = probe_ping(cmd.ping, count)
+    if cmd.ready is not None:
+        body["ready"] = body["awake"] and probe_port(cmd.ping, cmd.ready)
+    return body
+
+
 def run_command(cmd: Command) -> dict:
     kind, arg = cmd.run
     if kind == "wol":
@@ -381,7 +414,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._reply(404, {"error": "unknown command"})
             if cmd.ping is None:
                 return self._reply(404, {"error": "command has no ping"})
-            return self._reply(200, probe_ping(cmd.ping, count))
+            return self._reply(200, probe_status(cmd, count))
         if parsed.path == "/status":  # legacy 0.1
             cmd = next((c for c in self.config["commands"].values() if c.ping), None)
             if cmd is None:
@@ -422,24 +455,24 @@ PANEL_HTML = """<!doctype html>
   .wrap { max-width:560px; margin:0 auto; padding:34px 20px; }
   h1 { font-size:13px; letter-spacing:4px; font-weight:700; margin:0 0 26px 0; }
   h1 span { color:#ff5d49; }
-  .label { font-size:10px; letter-spacing:2px; color:#5f6871; margin:26px 0 10px 0; }
+  .label { font-size:10px; letter-spacing:2px; color:#8d969f; margin:26px 0 10px 0; }
   .row { display:flex; align-items:center; gap:12px; background:#101315; border:1px solid #1e242a;
          border-radius:8px; padding:14px; margin-bottom:10px; }
   .name { font-size:14px; flex-grow:1; }
-  .status { font-size:10px; letter-spacing:1.5px; color:#5f6871; }
+  .status { font-size:10px; letter-spacing:1.5px; color:#8d969f; }
   .status.ok { color:#45d06d; text-shadow:0 0 10px rgba(69,208,109,.7); }
   .status.busy { color:#e2a63d; text-shadow:0 0 8px rgba(226,166,61,.7); }
   .status.err { color:#ff5d49; }
   button { background:none; border:1px solid #242b31; border-radius:5px; color:#aab2b9;
            font:inherit; font-size:12px; padding:9px 16px; cursor:pointer; }
-  button:hover { border-color:#3a434c; }
+  button:hover { border-color:#7c858e; }
   button.primary { background:#e6e3dc; color:#0b0d0f; border:none; font-weight:700;
                    letter-spacing:1px; width:100%; padding:14px; border-radius:8px; }
   input { background:#101315; border:1px solid #1e242a; border-radius:6px; color:#e6e3dc;
           font:inherit; font-size:14px; padding:12px 14px; width:100%; box-sizing:border-box; margin-bottom:12px; }
-  .hint { font-size:11px; color:#3a434c; line-height:1.7; }
+  .hint { font-size:11px; color:#7c858e; line-height:1.7; }
 </style></head><body><div class="wrap">
-<h1><span>&#9211;</span> WAKEPC <span style="color:#5f6871">PANEL</span></h1>
+<h1><span>&#9211;</span> WAKEPC <span style="color:#8d969f">PANEL</span></h1>
 <div id="login" style="display:none">
   <div class="label">TOKEN</div>
   <input id="tok" type="text" autocomplete="off" placeholder="pin or passphrase from /etc/wakepc.conf">
@@ -481,19 +514,28 @@ async function init() {
   if (info.you) $('who').textContent = 'recognised as ' + info.you + ', no token needed here.';
   $('cmds').innerHTML = info.commands.map((c) => `
     <div class="row">
-      <div class="name">${c.name}${c.elevated ? ' <span style="color:#5f6871">· code</span>' : ''}</div>
+      <div class="name">${c.name}${c.elevated ? ' <span style="color:#8d969f">· code</span>' : ''}</div>
       <div class="status" id="st-${c.name}"></div>
       <button onclick="run('${c.name}', ${c.ping}, ${c.elevated})">run</button>
     </div>`).join('');
   info.commands.filter((c) => c.ping).forEach((c) => refresh(c.name));
 }
 
+// READY: the ready port answers. UP: it pings, but the port does not answer
+// yet. AWAKE: it pings, and the relay has no port to check.
+function label(s) {
+  if (!s.awake) return 'ASLEEP';
+  if (s.ready === undefined) return 'AWAKE';
+  return s.ready ? 'READY' : 'UP';
+}
+
 async function refresh(name) {
   try {
     const s = await (await api('/status/' + name)).json();
     const el = $('st-' + name);
-    el.className = 'status ' + (s.awake ? 'ok' : '');
-    el.textContent = s.awake ? 'AWAKE' + (s.avg_ms ? ' · ' + s.avg_ms.toFixed(1) + 'MS' : '') : 'ASLEEP';
+    const word = label(s);
+    el.className = 'status ' + (word === 'UP' ? 'busy' : s.awake ? 'ok' : '');
+    el.textContent = word + (s.awake && s.avg_ms ? ' · ' + s.avg_ms.toFixed(1) + 'MS' : '');
   } catch (e) { /* leave blank */ }
 }
 
@@ -513,12 +555,14 @@ async function run(name, ping, elevated) {
   const started = Date.now();
   while (Date.now() - started < 90000) {
     await new Promise((r) => setTimeout(r, 3000));
-    el.className = 'status busy';
-    el.textContent = 'WAKING · ' + Math.round((Date.now() - started) / 1000) + 'S';
     const s = await (await api('/status/' + name)).json();
-    if (s.awake) { el.className = 'status ok'; el.textContent = 'AWAKE'; return; }
+    const word = label(s);
+    if (word === 'READY' || word === 'AWAKE') { el.className = 'status ok'; el.textContent = word; return; }
+    el.className = 'status busy';
+    el.textContent = (word === 'UP' ? 'UP' : 'WAKING') + ' · ' + Math.round((Date.now() - started) / 1000) + 'S';
   }
-  el.className = 'status err'; el.textContent = 'NO REPLY YET';
+  el.className = 'status err';
+  el.textContent = el.textContent.startsWith('UP') ? 'UP, NOT READY YET' : 'NO REPLY YET';
 }
 
 init();
@@ -570,6 +614,9 @@ def print_status():
     print(f"commands: {', '.join(config['commands'])}")
     if gated:
         print(f"          confirmation required for: {', '.join(gated)}")
+    checked = [f"{n} (port {c.ready})" for n, c in config["commands"].items() if c.ready]
+    if checked:
+        print(f"          ready when the port answers: {', '.join(checked)}")
 
 
 def main():

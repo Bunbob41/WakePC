@@ -201,6 +201,10 @@ sequenceDiagram
   away the QR only saved typing an address, so it was removed.
 - **Status is a real ping**, done by the relay on your LAN, so "awake" means the
   machine genuinely answered, not that a packet was sent hopefully.
+- **UP and READY.** A PC answers ping early while it is still booting. If the Pi
+  is told a port that only opens once Windows has finished starting (445, file
+  sharing, works on most PCs), the app shows UP while it is starting and READY
+  when you can actually use it. Without that setting you see AWAKE, as before.
 - **The console** (tap the `>` line above the main button) lists every request the
   app has made with how long it took, which is the fastest way to see why
   something did not work.

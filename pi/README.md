@@ -39,6 +39,7 @@ sudo systemctl restart wakepc
 [command:wake-pc]
 run = WOL AA:BB:CC:DD:EE:FF     # the PC's ethernet MAC
 ping = 192.168.1.50             # optional: lets the app show awake/asleep + rtt
+ready = 445                     # optional: UP until this port answers, then READY
 broadcast_ip = 192.168.1.255    # optional: your subnet's broadcast
 
 [command:reboot-pi]

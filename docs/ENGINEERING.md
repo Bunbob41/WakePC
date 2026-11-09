@@ -37,7 +37,8 @@ Preferences. Widgets bypass the ViewModel and call `WakeApi` directly, because a
 Glance `ActionCallback` has no lifecycle to host one.
 
 **Wire protocol** (`pi/wakepc.py`): `GET /commands`, `POST /run/<name>`,
-`GET /status/<name>?count=N`, legacy `/wake` + `/status`, plus `/` (HTML
+`GET /status/<name>?count=N` (adds `ready` when the command names a ready
+port), legacy `/wake` + `/status`, plus `/` (HTML
 panel). Callers are identified by `tailscale whois` on the source
 address; a bearer token is the fallback. Commands the relay marks `elevated`
 additionally require `X-WakePC-Confirm`. 8 failures in 5 minutes locks the
@@ -47,6 +48,36 @@ can never supply a shell string.
 ## Decision log
 
 Newest first. Each entry: the decision, why, and what it replaced.
+
+### READY: waiting for a usable machine, not just a ping (0.15.0)
+
+A command can name a TCP port (`ready = 445`). `/status` then adds
+`"ready": bool`: true when that port accepts a connection within a second. An
+asleep machine is never ready and its port is not tried, so polling a sleeping
+machine costs no extra timeout. The app reads the pair as one `Readiness`
+(ASLEEP, UP, READY, AWAKE) shared by the home screen, widgets, tile and panel.
+A wake now keeps polling through UP until READY, and ends "UP · NOT READY YET"
+if the 90 second window runs out. The tile's window went from 40 to 90 seconds
+to match.
+
+*Why:* ping answers early in a Windows boot, so AWAKE arrived before the PC
+could be used. Port 445 (file sharing) opens once Windows has started its
+services. Checked live on the user's PC from the Pi: 135, 139, 445, 3389 and
+others answered; 445 was chosen as the one every Windows PC has.
+
+*Compatibility:* a relay without `ready` sends no field, which the app reads as
+AWAKE and treats exactly as before, so old relays and new apps mix in either
+direction. **Replaced:** nothing; AWAKE is still the answer when there is no
+port.
+
+*Considered and dropped:* tying READY to a remote desktop app. It only works
+for tools that listen on a port, and the user did not want that coupling.
+
+*Guards:* `ReadyTest` (Python) runs a real relay and a real listener on
+loopback: ready true on an open port, false on a closed one, false when asleep,
+no field without `ready`, and the panel's labels. Config rejects a non-numeric,
+out of range, or ping-less `ready`. `ReadinessTest` and four `HomeViewModelTest`
+cases cover parsing, the shared labels and the wake loop.
 
 ### Readable greys and a minimum text size (0.14.1)
 

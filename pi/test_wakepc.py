@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import socket
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from unittest import mock
 
 # wakepc.py exits at import time if /etc/wakepc.conf is missing, so load it as a
 # module without running main() and point CONFIG_PATH at a temp file per test.
@@ -82,6 +84,9 @@ class ConfigTest(unittest.TestCase):
             ("unknown runner", VALID.replace("run = WOL AA:BB:CC:DD:EE:FF", "run = rm -rf /")),
             ("bad command name", VALID.replace("[command:wake-pc]", "[command:Wake PC!]")),
             ("no commands", VALID.split("[command:")[0]),
+            ("ready not a number", VALID.replace("ping = 192.168.1.50", "ping = 192.168.1.50\nready = smb")),
+            ("ready out of range", VALID.replace("ping = 192.168.1.50", "ping = 192.168.1.50\nready = 70000")),
+            ("ready without ping", VALID.replace("run = shell sudo /usr/sbin/reboot", "run = shell sudo /usr/sbin/reboot\nready = 445")),
         ]:
             with self.subTest(label):
                 write_config(text)
@@ -252,6 +257,90 @@ class SetupQrRemovedTest(unittest.TestCase):
         self.assertNotEqual(done.returncode, 0)
         self.assertTrue(done.stderr.startswith("unknown command: qr"), done.stderr)
         self.assertNotIn("qr", done.stderr.split("\n", 1)[1])
+
+
+class ReadyTest(unittest.TestCase):
+    """A machine answers ping well before it is usable. A command can name a
+    TCP port (`ready = 445`), and /status then says whether that port answers
+    as well. These run a real relay and a real listener on loopback."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.listener = socket.socket()
+        cls.listener.bind(("127.0.0.1", 0))
+        cls.listener.listen(8)
+        cls.open_port = cls.listener.getsockname()[1]
+        # A port that was just free: bind, note it, close, so nothing listens.
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        cls.closed_port = probe.getsockname()[1]
+        probe.close()
+
+        config = LOOPBACK.replace("ping = 192.168.1.50", "ping = 127.0.0.1")
+        config += (
+            f"\n[command:wake-open]\nrun = WOL AA:BB:CC:DD:EE:01\nping = 127.0.0.1\nready = {cls.open_port}\n"
+            f"\n[command:wake-closed]\nrun = WOL AA:BB:CC:DD:EE:02\nping = 127.0.0.1\nready = {cls.closed_port}\n"
+            "\n[command:wake-asleep]\nrun = WOL AA:BB:CC:DD:EE:03\nping = 127.0.0.1\n"
+            f"ready = {cls.open_port}\n"
+        )
+        write_config(config)
+        wakepc.Handler.config = wakepc.load_config()
+        wakepc.Handler.log_message = lambda *args: None
+        cls.server = wakepc.ThreadingHTTPServer(("127.0.0.1", 0), wakepc.Handler)
+        cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.listener.close()
+
+    def status(self, name):
+        request = urllib.request.Request(
+            f"{self.base}/status/{name}", headers={"Authorization": "Bearer test-token"}
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return json.loads(response.read())
+
+    def test_the_ready_port_is_parsed(self):
+        commands = wakepc.Handler.config["commands"]
+        self.assertEqual(commands["wake-open"].ready, self.open_port)
+        self.assertIsNone(commands["wake-pc"].ready)
+
+    def test_awake_with_the_port_answering_is_ready(self):
+        body = self.status("wake-open")
+        self.assertTrue(body["awake"], body)
+        self.assertIs(body["ready"], True, body)
+
+    def test_awake_with_the_port_shut_is_not_ready(self):
+        body = self.status("wake-closed")
+        self.assertTrue(body["awake"], body)
+        self.assertIs(body["ready"], False, body)
+
+    def test_asleep_is_never_ready_even_if_the_port_would_answer(self):
+        # The port really does answer here (checked first), and only ping is
+        # made to fail, so this proves the relay does not try the port at all
+        # when the machine is asleep, rather than trying a port that is shut.
+        self.assertTrue(wakepc.probe_port("127.0.0.1", self.open_port))
+        asleep = {"awake": False, "sent": 1, "loss_pct": 100.0}
+        with mock.patch.object(wakepc, "probe_ping", return_value=asleep):
+            body = self.status("wake-asleep")
+        self.assertFalse(body["awake"], body)
+        self.assertIs(body["ready"], False, body)
+
+    def test_without_a_ready_port_the_reply_is_unchanged(self):
+        # Older apps and machines with no `ready` see exactly what they did.
+        body = self.status("wake-pc")
+        self.assertTrue(body["awake"], body)
+        self.assertNotIn("ready", body)
+
+    def test_the_panel_shows_up_and_ready(self):
+        request = urllib.request.Request(self.base + "/")
+        with urllib.request.urlopen(request, timeout=5) as response:
+            page = response.read().decode()
+        self.assertIn("'READY'", page)
+        self.assertIn("'UP'", page)
 
 
 if __name__ == "__main__":
