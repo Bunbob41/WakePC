@@ -38,8 +38,8 @@ is why a phone is allowed to add one. Set `phone_setup = no` in
 `/etc/wakepc.conf` if you would rather this file be the only place anything
 is defined.
 
-Until the app's new setup screen ships, you can add a machine by hand from any
-device on your tailnet:
+The app does this for you during setup. To add a machine by hand instead, from
+any device on your tailnet:
 
 ```bash
 curl http://<address>:8787/scan

@@ -104,7 +104,7 @@ fun SettingsScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("CONNECTIONS")
+                SectionLabel("RELAYS")
                 state.connections.forEach { conn ->
                     Row(
                         modifier =
@@ -131,7 +131,7 @@ fun SettingsScreen(
                             .padding(vertical = 13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ConsoleText("+ add connection", size = 12, color = Palette.dim)
+                    ConsoleText("+ add relay", size = 12, color = Palette.dim)
                 }
             }
         }

@@ -98,6 +98,47 @@ that failure is silent and arrives months after setup.
 is usable or the time is up. The app polls and does not need it; a script or
 an assistant wants one request that ends in an answer.
 
+### Setup as three checked steps, and failures that name the link (unreleased)
+
+**The app side of the entry above.** `SetupScreen` replaces the empty screen,
+the first-run connection form and the "new machine" form with three steps:
+connect, pick, wake. Each proves itself before the next begins. The model
+underneath is unchanged (`Connection`, `Machine`, `CommandRef`): a machine
+picked in setup is stored as a `Machine` holding the relay's `wake-<id>`
+command, so the home screen, widgets, tile and saved state needed no
+migration. The old editors remain for editing and for the advanced cases
+(a token, a fallback address, one machine drawing commands from two relays).
+
+**Logic apart from screens.** `Setup.kt` and `GuidedWake.kt` hold everything
+that can be wrong (`checkRelay`, `guidedWake`, the state transforms) as plain
+functions over `WakeRepository`, tested on the JVM with a fake. The Compose
+code only lays them out. Nothing in this project renders a screen in a test,
+so the layout itself is checked by eye on a device.
+
+**Typed failures.** Every request failure is sorted once, in `WakeApi`, into
+a `FailureKind`: could not resolve, no answer, refused, not recognised, wrong
+code, not found, old relay, rejected. `relayDown` is true for the first group
+only. That one bit is what the UI was missing: a poll that cannot reach the
+relay now clears what was known about the PC and shows NO RELAY, where it
+used to leave a stale AWAKE or a blank, and a timeout used to ask "is the
+machine awake?" about a relay that was off. A relay that answers with an
+error is not down, and is not shown as down. A request that got an HTTP
+answer is not retried on the fallback address, since repeating a POST there
+could do the thing twice.
+
+**Tailscale off is detected, loosely.** If no VPN transport is active on the
+phone, a "no answer" is reported as Tailscale looking off. It is a hint, not
+a check: another VPN would satisfy it.
+
+**The ready port is chosen, not guessed.** Setup sends `"ready": "auto"`. The
+machine is on at that moment, so the relay tries 3389, 445 and 22 and keeps
+the first that answers, or none. A fixed default of 445 would have left every
+wake stuck at UP on a PC with file sharing off.
+
+**Not verified.** No emulator runs in CI or in the session that wrote this,
+so the three screens have been compiled and their logic tested, but not seen.
+The Windows relay mode (`install.ps1 -Relay`) has not been run on Windows.
+
 ### READY: waiting for a usable machine, not just a ping (0.15.0)
 
 A command can name a TCP port (`ready = 445`). `/status` then adds

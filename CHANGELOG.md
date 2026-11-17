@@ -8,24 +8,53 @@ The reasoning behind each change lives in
 
 ## Unreleased
 
-The relay half of a simpler setup. The app's new setup screen follows.
+Setup to first wake, rebuilt. It used to mean finding a MAC address, editing a
+file on the Pi and filling in two forms, with nothing checked until the end.
 
-- No config editing for a first wake. The relay can scan its own network and
-  remember machines the app registers, so setup no longer means finding a MAC
-  address and typing it into a file on the Pi. A fresh relay starts empty.
-- A phone can only ever add a machine to wake. Shell commands still come from
-  the relay's config file alone. `phone_setup = no` turns even that off.
-- The relay recovers on its own. It used to read its Tailscale address once
-  at startup, and if that changed it went on listening where nothing arrived
-  until the host was rebooted. It now follows the address.
-- `/health` reports problems in plain words, including a Tailscale key that is
-  about to expire.
-- Wake and wait: `POST /machines/<id>/wake?wait=90` replies once the machine
-  is usable, for callers that are not the app.
+**Setup**
+
+- Three checked steps in the app: connect to the relay, pick your PC from a
+  list, wake it while you watch. No config file is edited anywhere.
+- Connect is one field. If it fails, the app marks which link broke: Tailscale
+  on the phone, reaching the relay, or the relay recognising the phone.
+- The relay scans its own network and the app lists what it found. Tap your
+  PC, name it, done. A MAC can still be typed by hand.
+- The first wake is guided: packet sent, waiting, starting up, ready. If the
+  PC never answers, the app lists the usual causes.
+- The relay picks the port to wait for by looking at the PC while it is on,
+  so READY works without anyone choosing a port.
+- "Connection" is now "relay" throughout. Colour, fallback address and token
+  are folded under *advanced*.
+
+**Saying what is wrong**
+
+- A relay that cannot be reached shows **NO RELAY** on the card, the widgets
+  and the tile, instead of a timeout that asked whether the PC was awake.
+- A wake the relay sent that the PC ignored shows **PC DID NOT ANSWER**.
+- Errors name the relay and say what to do. The line above the main button
+  shows two lines, so the reason is no longer cut off.
+- The home screen shows anything the relay wants looked at, such as a
+  Tailscale key about to expire.
+
+**The relay**
+
+- Any always-on computer can be the relay. On Windows,
+  `install.ps1 -Relay` sets one up and offers to stop the PC sleeping.
+- It recovers on its own. It used to read its Tailscale address once at
+  startup, and if that changed it listened where nothing arrived until the
+  host was rebooted. It now follows the address.
+- A phone can only ever add a machine to wake, at a home-network address.
+  Shell commands still come from the relay's config file alone.
+  `phone_setup = no` turns even that off.
+- `/health` reports problems in plain words. `POST /machines/<id>/wake?wait=90`
+  replies once the machine is usable, for callers that are not the app.
 - An unedited example config no longer offers a wake button that wakes
-  nothing: the example MAC is ignored, and the example ships with no commands.
-- Each machine also appears as the command `wake-<id>`, so the current app and
-  the Pi panel can use it already.
+  nothing, and the example ships with no commands.
+- Each machine also appears as the command `wake-<id>`, so older versions of
+  the app and the panel can use it.
+
+Existing setups keep working unchanged: saved relays, machines, widgets and
+config files all load as before.
 
 ## 0.15.0 (2026-11-08)
 

@@ -669,6 +669,30 @@ class MachinesApiTest(unittest.TestCase):
         self.assertEqual(self.call("DELETE", "/machines/desk-pc")[0], 404)
         self.assertEqual(self.call("GET", "/machines")[1], {"machines": []})
 
+    def test_auto_ready_picks_a_port_the_machine_answers_on(self):
+        # Added while it is on, so the relay can see what it offers: here
+        # remote desktop is shut and file sharing answers.
+        with mock.patch.object(wakepc, "probe_port", side_effect=lambda ip, port, timeout=1: port == 445) as probe:
+            code, machine = self.add(ready="auto")
+        self.assertEqual((code, machine["ready"]), (201, 445))
+        self.assertEqual([c.args[:2] for c in probe.call_args_list],
+                         [("192.168.1.50", 3389), ("192.168.1.50", 445)])
+
+    def test_auto_ready_with_nothing_answering_means_no_ready_port(self):
+        with mock.patch.object(wakepc, "probe_port", return_value=False):
+            self.assertIsNone(self.add(ready="auto")[1]["ready"])
+        # No address, nothing to look at, and nothing is probed.
+        with mock.patch.object(wakepc, "probe_port") as probe:
+            code, machine = self.call("POST", "/machines",
+                                      {"name": "Other", "mac": "3C:7C:3F:12:34:99", "ready": "auto"})
+        self.assertEqual((code, machine["ready"]), (201, None))
+        probe.assert_not_called()
+
+    def test_auto_ready_never_probes_an_address_off_the_lan(self):
+        with mock.patch.object(wakepc, "probe_port") as probe:
+            self.assertEqual(self.add(ip="8.8.8.8", ready="auto")[0], 400)
+        probe.assert_not_called()
+
     def test_a_bad_machine_is_refused_with_the_reason(self):
         code, body = self.add(mac="AA:BB:CC:DD:EE:FF")
         self.assertEqual(code, 400)

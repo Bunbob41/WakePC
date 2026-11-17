@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +29,9 @@ sealed interface Screen {
     data object Settings : Screen
 
     data object Console : Screen
+
+    /** First-time setup, and adding a machine later: the same checked steps. */
+    data object Setup : Screen
 
     data class EditConnection(
         val id: String?,
@@ -47,6 +51,7 @@ private val screenSaver =
                 Screen.Home -> listOf("home", null, false)
                 Screen.Settings -> listOf("settings", null, false)
                 Screen.Console -> listOf("console", null, false)
+                Screen.Setup -> listOf("setup", null, false)
                 is Screen.EditConnection -> listOf("connection", screen.id, screen.fromEmpty)
                 is Screen.EditMachine -> listOf("machine", screen.id, false)
             }
@@ -56,6 +61,7 @@ private val screenSaver =
             when (saved[0]) {
                 "settings" -> Screen.Settings
                 "console" -> Screen.Console
+                "setup" -> Screen.Setup
                 "connection" -> Screen.EditConnection(id, saved[2] as Boolean)
                 "machine" -> Screen.EditMachine(id)
                 else -> Screen.Home
@@ -91,10 +97,12 @@ private fun App(store: Store) {
     }
     val current = state ?: return
 
-    BackHandler(enabled = screen != Screen.Home) {
+    // A fresh install opens on setup with nothing behind it, so back leaves the app.
+    val setupIsHome = screen == Screen.Setup && current.connections.isEmpty()
+    BackHandler(enabled = screen != Screen.Home && !setupIsHome) {
         screen =
             when (val s = screen) {
-                is Screen.EditConnection -> if (s.fromEmpty) Screen.Home else Screen.Settings
+                is Screen.EditConnection -> if (s.fromEmpty) Screen.Setup else Screen.Settings
                 else -> Screen.Home
             }
     }
@@ -102,7 +110,9 @@ private fun App(store: Store) {
     when (val s = screen) {
         Screen.Home -> {
             if (current.connections.isEmpty()) {
-                EmptyScreen(onAddConnection = { screen = Screen.EditConnection(null, fromEmpty = true) })
+                // Setup saves the relay partway through; as its own screen it
+                // is not torn down the moment that makes this branch false.
+                LaunchedEffect(Unit) { screen = Screen.Setup }
             } else {
                 val homeVm: HomeViewModel =
                     viewModel(
@@ -110,7 +120,7 @@ private fun App(store: Store) {
                     )
                 HomeScreen(
                     vm = homeVm,
-                    onAddMachine = { screen = Screen.EditMachine(null) },
+                    onAddMachine = { screen = Screen.Setup },
                     onEditMachine = { screen = Screen.EditMachine(it) },
                     onSettings = { screen = Screen.Settings },
                     onConsole = { screen = Screen.Console },
@@ -120,6 +130,16 @@ private fun App(store: Store) {
 
         Screen.Console -> {
             ConsoleScreen(onBack = { screen = Screen.Home })
+        }
+
+        Screen.Setup -> {
+            SetupScreen(
+                store = store,
+                state = current,
+                onBack = if (current.connections.isEmpty()) null else ({ screen = Screen.Home }),
+                onAdvanced = { screen = Screen.EditConnection(null, fromEmpty = true) },
+                onDone = { screen = Screen.Home },
+            )
         }
 
         Screen.Settings -> {
@@ -135,9 +155,9 @@ private fun App(store: Store) {
             ConnectionEditor(
                 store = store,
                 connectionId = s.id,
-                // First connection saved: carry straight on into naming the first machine.
-                onSaved = { screen = if (s.fromEmpty) Screen.EditMachine(null) else Screen.Settings },
-                onClosed = { screen = if (s.fromEmpty) Screen.Home else Screen.Settings },
+                // Saved from setup's advanced link: carry on into picking the PC.
+                onSaved = { screen = if (s.fromEmpty) Screen.Setup else Screen.Settings },
+                onClosed = { screen = if (s.fromEmpty) Screen.Setup else Screen.Settings },
             )
         }
 

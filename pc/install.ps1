@@ -1,6 +1,12 @@
 <#
-  Installs the WakePC service on a Windows machine, so the phone can shut it
-  down, restart it, sleep or lock it.
+  Installs the WakePC service on a Windows machine. Two uses:
+
+  As the relay, on a PC that stays on at home and wakes the others:
+
+      powershell -ExecutionPolicy Bypass -File .\install.ps1 -Relay
+
+  Or on the PC you wake, so the phone can also shut it down, restart it,
+  sleep or lock it:
 
       powershell -ExecutionPolicy Bypass -File .\install.ps1
 
@@ -11,6 +17,11 @@
 
   Safe to re-run: an existing config is never overwritten.
 #>
+param(
+    # Set this machine up as the relay: no shutdown buttons, and the checks
+    # an always-on machine needs.
+    [switch]$Relay
+)
 $ErrorActionPreference = 'Stop'
 
 $src     = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -24,7 +35,7 @@ $log     = Join-Path $install 'wakepc.log'
 # pythonw runs the service without a console window, but it writes nothing to
 # stdout - so anything whose output we need has to go through python.exe.
 $pythonConsole = (Get-Command python -ErrorAction SilentlyContinue).Source
-if (-not $pythonConsole) { throw 'python not found on PATH' }
+if (-not $pythonConsole) { throw 'python not found on PATH. Install it first: winget install Python.Python.3.13' }
 $python = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
 if (-not $python) { $python = $pythonConsole }
 
@@ -50,7 +61,8 @@ if (Test-Path $conf) {
     $fresh = $true
     # No token: this relay identifies callers with 'tailscale whois',
     # so there is nothing to carry across to the phone.
-    $lines = Get-Content (Join-Path $src 'wakepc.conf.example')
+    $example = if ($Relay) { 'wakepc-relay.conf.example' } else { 'wakepc.conf.example' }
+    $lines = Get-Content (Join-Path $src $example)
     [IO.File]::WriteAllLines($conf, $lines, (New-Object Text.UTF8Encoding($false)))
     Write-Host "wrote $conf"
 }
@@ -112,7 +124,26 @@ Write-Host "wakepc installed - $note"
 $env:WAKEPC_CONFIG = $conf
 & $pythonConsole $script status
 Write-Host "log: $log"
-if ($fresh) {
-    Write-Host 'add it in the app as another connection - paste the address above, leave the token empty.'
+if ($Relay) {
+    Write-Host ''
+    Write-Host 'This PC is now the relay. Three things keep it reachable:'
+    if (-not $elevated) {
+        Write-Warning 'it only starts when you log in. Run this again as Administrator so it starts at boot.'
+    }
+    # A relay that goes to sleep takes every wake button with it.
+    $answer = Read-Host 'Stop this PC sleeping while plugged in, so the relay stays up? [Y/n]'
+    if ($answer -notmatch '^[nN]') {
+        powercfg /change standby-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
+        Write-Host '  sleep and hibernate on mains power are off (the screen can still turn off).'
+    } else {
+        Write-Host '  left alone. If this PC sleeps, the app will say it cannot reach the relay.'
+    }
+    Write-Host '  after a power cut: in the BIOS, set "restore on AC power loss" to power on.'
+    Write-Host '  Tailscale: in the admin console, disable key expiry for this PC, or it drops off in 6 months.'
+    Write-Host ''
+    Write-Host 'Next, in the app: type the address above, then pick your PC from the list.'
+} elseif ($fresh) {
+    Write-Host 'add it in the app as another relay - paste the address above, leave the token empty.'
     Write-Host 'then set confirm_code in the config to your 6-digit code so the relay checks it too.'
 }

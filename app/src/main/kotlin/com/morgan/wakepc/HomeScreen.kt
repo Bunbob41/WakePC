@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** UI-layer mapping from the ViewModel's colour-free status to the palette. */
 private fun Tone.color(): Color =
@@ -53,6 +54,7 @@ fun HomeScreen(
 ) {
     val state by vm.state.collectAsState()
     val runtime by vm.runtime.collectAsState()
+    val relayNotes by vm.relayNotes.collectAsState()
     val logLines by AppLog.lines.collectAsState()
 
     // Nothing runs from the app without the confirmation code for that
@@ -99,6 +101,19 @@ fun HomeScreen(
                     .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // Things a relay wants looked at, such as a key about to expire:
+            // said here, before they become a wake that silently fails.
+            state.connections.forEach { conn ->
+                relayNotes[conn.id].orEmpty().forEach { note ->
+                    androidx.compose.material3.Text(
+                        text = "${conn.name}: $note",
+                        color = Palette.amber,
+                        fontSize = 12.sp,
+                        fontFamily = Mono,
+                        lineHeight = 19.sp,
+                    )
+                }
+            }
             state.machines.forEach { machine ->
                 val connection = state.connection(machine.connectionId)
                 val pingCmd = machine.commands.firstOrNull { it.ping }
@@ -109,6 +124,7 @@ fun HomeScreen(
                     transient = rt.transient,
                     readiness = if (pingCmd != null) rt.readiness else null,
                     avgMs = if (pingCmd != null) rt.avgMs else null,
+                    relayDown = rt.relayDown,
                     runningCommand = rt.running,
                     onRun = { cmd -> attempt(machine, cmd) },
                     onEdit = { onEditMachine(machine.id) },
@@ -146,7 +162,8 @@ fun HomeScreen(
                     "> ${last.text}",
                     size = 12,
                     color = if (last.ok == false) Palette.red else Palette.faint,
-                    maxLines = 1,
+                    // Two lines: a failure's reason is the part that got cut off.
+                    maxLines = 2,
                 )
             }
         }
@@ -159,6 +176,7 @@ fun HomeScreen(
                 resolved = hero,
                 transient = rt.transient,
                 readiness = if (hero.command.ping) rt.readiness else null,
+                relayDown = rt.relayDown,
                 onRun = { attempt(hero.machine, hero.command) },
             )
         }
@@ -196,6 +214,7 @@ private fun MachineCard(
     transient: Transient?,
     readiness: Readiness?,
     avgMs: Double?,
+    relayDown: Boolean,
     runningCommand: String?,
     onRun: (CommandRef) -> Unit,
     onEdit: () -> Unit,
@@ -217,7 +236,7 @@ private fun MachineCard(
                 pulse = active,
             )
             Spacer(modifier = Modifier.size(2.dp))
-            ConsoleText(machine.name.ifBlank { "unnamed" }, size = 15, weight = FontWeight.Medium)
+            ConsoleText(machine.name.ifBlank { "my pc" }, size = 15, weight = FontWeight.Medium)
             Spacer(modifier = Modifier.weight(1f))
             Box(
                 modifier =
@@ -232,6 +251,10 @@ private fun MachineCard(
                         StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
                     }
 
+                    relayDown -> {
+                        StatusText(RELAY_DOWN_CHIP, Palette.red)
+                    }
+
                     readiness != null -> {
                         val ms = if (readiness == Readiness.ASLEEP) "" else avgMs?.let { " · ${fmtMs(it)}MS" } ?: ""
                         StatusText(readiness.name + ms, readiness.color(), glow = readiness != Readiness.ASLEEP)
@@ -240,9 +263,13 @@ private fun MachineCard(
             }
         }
         ConsoleText(
-            "via ${connection?.name ?: "missing connection"}",
+            when {
+                connection == null -> "its relay was removed: hold to edit"
+                relayDown -> "can't reach ${connection.name}, so its state is unknown"
+                else -> "via ${connection.name}"
+            },
             size = 12,
-            color = Palette.faint,
+            color = if (relayDown || connection == null) Palette.red else Palette.faint,
             modifier = Modifier.padding(start = 26.dp, top = 2.dp),
         )
         // A machine can draw commands from several relays, so this has to wrap:
@@ -283,6 +310,7 @@ private fun HeroButton(
     resolved: ResolvedButton,
     transient: Transient?,
     readiness: Readiness?,
+    relayDown: Boolean,
     onRun: () -> Unit,
 ) {
     when (style) {
@@ -321,7 +349,7 @@ private fun HeroButton(
                         modifier = Modifier.padding(top = 3.dp),
                     )
                 }
-                HeroStatus(transient, readiness)
+                HeroStatus(transient, readiness, relayDown)
             }
         }
 
@@ -353,7 +381,7 @@ private fun HeroButton(
                         )
                     }
                 }
-                Box(modifier = Modifier.padding(top = 14.dp)) { HeroStatus(transient, readiness) }
+                Box(modifier = Modifier.padding(top = 14.dp)) { HeroStatus(transient, readiness, relayDown) }
             }
         }
 
@@ -385,9 +413,11 @@ private fun HeroButton(
 private fun HeroStatus(
     transient: Transient?,
     readiness: Readiness?,
+    relayDown: Boolean,
 ) {
     when {
         transient != null -> StatusText(transient.text, transient.tone.color(), pulse = transient.pulse, glow = transient.glow)
+        relayDown -> StatusText(RELAY_DOWN_CHIP, Palette.red)
         readiness != null -> StatusText(readiness.name, readiness.color(), glow = readiness != Readiness.ASLEEP)
     }
 }

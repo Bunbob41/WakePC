@@ -1,0 +1,15 @@
+# A Windows PC as the WakePC relay: the always-on machine that wakes the
+# others. Nothing here needs editing for a first wake. Add your PC from the
+# app, which asks this relay to look around the network for it.
+[wakepc]
+# Devices on your tailnet are identified by `tailscale whois` and need no
+# credential. See pi/wakepc.conf.example for the full set of options.
+trust_tailnet = yes
+
+# Lets the app register machines to wake. That is all a phone can add: a wake
+# packet only ever turns a machine on.
+phone_setup = yes
+
+# "auto" binds to this PC's own Tailscale address.
+bind_host = auto
+port = 8787

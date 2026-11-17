@@ -49,8 +49,15 @@ class WakeTileService : TileService() {
             }
 
             updateTile(subtitle = "Running…", state = Tile.STATE_ACTIVE)
-            if (WakeApi.run(target.connection, target.command.name).isFailure) {
-                updateTile(subtitle = "Couldn't reach ${target.connection.name}", state = Tile.STATE_INACTIVE)
+            WakeApi.run(target.connection, target.command.name).exceptionOrNull()?.let { failure ->
+                val relay = target.connection.name
+                val why =
+                    when (failure.failureKind) {
+                        FailureKind.NOT_RECOGNISED -> "$relay doesn't recognise this phone"
+                        FailureKind.NOT_FOUND, FailureKind.OLD_RELAY -> "$relay no longer has this button"
+                        else -> "Couldn't reach $relay"
+                    }
+                updateTile(subtitle = why, state = Tile.STATE_INACTIVE)
                 return@launch
             }
             if (!target.command.ping) {
@@ -71,7 +78,7 @@ class WakeTileService : TileService() {
                 }
             }
             updateTile(
-                subtitle = if (last == Readiness.UP) "${target.machine.name} up, not ready yet" else "Sent, no ping yet",
+                subtitle = if (last == Readiness.UP) "${target.machine.name} up, not ready yet" else "Sent, PC not answering yet",
                 state = Tile.STATE_INACTIVE,
             )
         }

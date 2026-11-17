@@ -58,4 +58,7 @@ if [ -n "$FRESH" ]; then
   echo
   echo "Next, in the app: add a connection with the address above (no token),"
   echo "then pick your PC from the list. Have the PC switched on so it shows up."
+  echo
+  echo "To keep this relay reachable: in the Tailscale admin console, disable"
+  echo "key expiry for it. Otherwise it drops off your tailnet in about 6 months."
 fi

@@ -368,10 +368,13 @@ private fun MachineRow(
     }
 }
 
+/** Every label that means something went wrong, so each is drawn in red. */
+private val FAILURE_LABELS = FailureKind.entries.map { it.chip() }.toSet() + "NOT AUTHORISED"
+
 private fun statusColor(status: String) =
     when {
         status.startsWith("AWAKE") || status.startsWith("READY") || status == "OK" -> Palette.green
-        status == "FAILED" || status == "NOT AUTHORISED" -> Palette.red
+        status in FAILURE_LABELS -> Palette.red
         status == "ASLEEP" || status.isBlank() -> Palette.faint
         else -> Palette.amber
     }
@@ -411,9 +414,11 @@ class RunAction : ActionCallback {
         val confirmCode = if (target.command.elevated) gate else ""
 
         setStatus(context, glanceId, machineId, "SENDING")
+        val failure = WakeApi.run(target.connection, target.command.name, confirmCode).exceptionOrNull()
         when {
-            WakeApi.run(target.connection, target.command.name, confirmCode).isFailure -> {
-                setStatus(context, glanceId, machineId, "FAILED")
+            failure != null -> {
+                // NO RELAY when it is the relay that is out of reach, not the PC.
+                setStatus(context, glanceId, machineId, failure.failureKind.chip())
             }
 
             !target.command.ping -> {
@@ -447,7 +452,9 @@ class RefreshAction : ActionCallback {
         state.machines.forEach { machine ->
             val ping = machine.commands.firstOrNull { it.ping } ?: return@forEach
             val connection = state.connectionFor(machine, ping) ?: return@forEach
-            setStatus(context, glanceId, machine.id, widgetLabel(WakeApi.stats(connection, ping.name).getOrNull()))
+            val stats = WakeApi.stats(connection, ping.name)
+            val label = if (stats.exceptionOrNull()?.failureKind?.relayDown == true) RELAY_DOWN_CHIP else widgetLabel(stats.getOrNull())
+            setStatus(context, glanceId, machine.id, label)
         }
     }
 }

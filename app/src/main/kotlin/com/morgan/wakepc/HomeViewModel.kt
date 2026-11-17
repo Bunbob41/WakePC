@@ -32,6 +32,13 @@ data class MachineRuntime(
     val running: String? = null,
     /** The relay's ready port answers; null when it has none to check. See [Readiness]. */
     val ready: Boolean? = null,
+    /**
+     * The last request never reached the relay, so nothing above is known:
+     * the PC may be on or off. Shown as its own state rather than left as a
+     * stale AWAKE or a blank, which is what made a dead relay look like a
+     * sleeping PC.
+     */
+    val relayDown: Boolean = false,
 ) {
     val readiness: Readiness? get() = readinessOf(awake, ready)
 }
@@ -52,6 +59,10 @@ class HomeViewModel(
     private val _runtime = MutableStateFlow<Map<String, MachineRuntime>>(emptyMap())
     val runtime: StateFlow<Map<String, MachineRuntime>> = _runtime.asStateFlow()
 
+    /** What each relay says needs looking at, keyed by connection id. */
+    private val _relayNotes = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val relayNotes: StateFlow<Map<String, List<String>>> = _relayNotes.asStateFlow()
+
     private var pollJob: Job? = null
 
     /** Idempotent: the screen calls this when it becomes active. */
@@ -59,11 +70,23 @@ class HomeViewModel(
         if (pollJob?.isActive == true) return
         pollJob =
             viewModelScope.launch {
+                var round = 0
                 while (isActive) {
+                    // Health changes slowly (a key nearing expiry), so ask rarely.
+                    if (round++ % HEALTH_EVERY_N_POLLS == 0) checkRelays()
                     pollOnce()
                     delay(pollIntervalMs)
                 }
             }
+    }
+
+    private suspend fun checkRelays() {
+        state.value.connections.forEach { connection ->
+            // An older relay has no /health and so no notes; that is not news.
+            api.health(connection).onSuccess { health ->
+                _relayNotes.update { it + (connection.id to health.warnings) }
+            }
+        }
     }
 
     private suspend fun pollOnce() {
@@ -71,9 +94,20 @@ class HomeViewModel(
             val pingCmd = machine.commands.firstOrNull { it.ping } ?: return@forEach
             val connection = state.value.connectionFor(machine, pingCmd) ?: return@forEach
             if (_runtime.value[machine.id]?.running != null) return@forEach
-            api.stats(connection, pingCmd.name).onSuccess { stats ->
-                update(machine.id) { it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs) }
-            }
+            api.stats(connection, pingCmd.name).fold(
+                onSuccess = { stats ->
+                    update(machine.id) {
+                        it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs, relayDown = false)
+                    }
+                },
+                onFailure = { failure ->
+                    // Only a relay we could not reach wipes what we knew. One
+                    // that answered with an error is still there.
+                    if (failure.failureKind.relayDown) {
+                        update(machine.id) { it.copy(awake = null, ready = null, relayDown = true) }
+                    }
+                },
+            )
         }
     }
 
@@ -109,10 +143,13 @@ class HomeViewModel(
         confirmCode: String,
     ) {
         setTransient(machine.id, "WAKING · 0:00", Tone.ACTIVE, pulse = true, glow = true)
-        if (api.run(connection, command.name, confirmCode).isFailure) {
-            flash(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false, holdMs = 3_000)
+        api.run(connection, command.name, confirmCode).exceptionOrNull()?.let { failure ->
+            val kind = failure.failureKind
+            if (kind.relayDown) update(machine.id) { it.copy(awake = null, ready = null, relayDown = true) }
+            flash(machine.id, kind.chip(), Tone.BAD, glow = false, holdMs = 4_000)
             return
         }
+        update(machine.id) { it.copy(relayDown = false) }
         // Answering ping is not the end when the relay checks a ready port: a
         // machine that is UP is still starting, so keep waiting for READY.
         var last: Readiness? = null
@@ -133,7 +170,8 @@ class HomeViewModel(
             update(machine.id) { it.copy(awake = true, ready = false) }
             flash(machine.id, "UP · NOT READY YET", Tone.ACTIVE, glow = false, holdMs = 4_000)
         } else {
-            flash(machine.id, "NO REPLY YET", Tone.NEUTRAL, glow = false, holdMs = 4_000)
+            // The relay took the wake, so this is the PC not answering, not the relay.
+            flash(machine.id, "PC DID NOT ANSWER", Tone.BAD, glow = false, holdMs = 6_000)
         }
     }
 
@@ -144,8 +182,9 @@ class HomeViewModel(
         confirmCode: String,
     ) {
         setTransient(machine.id, "RUNNING", Tone.ACTIVE, pulse = true, glow = true)
-        val ok = api.run(connection, command.name, confirmCode).isSuccess
-        flash(machine.id, if (ok) "OK" else "FAILED", if (ok) Tone.GOOD else Tone.BAD, glow = ok, holdMs = 2_500)
+        val failure = api.run(connection, command.name, confirmCode).exceptionOrNull()
+        val ok = failure == null
+        flash(machine.id, if (ok) "OK" else failure.failureKind.chip(), if (ok) Tone.GOOD else Tone.BAD, glow = ok, holdMs = 2_500)
     }
 
     fun probe(
@@ -171,7 +210,7 @@ class HomeViewModel(
                         setTransient(machine.id, "NO REPLY · 100% LOSS", Tone.BAD, glow = false)
                     }
                 },
-                onFailure = { setTransient(machine.id, "UNREACHABLE", Tone.NEUTRAL, glow = false) },
+                onFailure = { setTransient(machine.id, it.failureKind.chip(), Tone.BAD, glow = false) },
             )
             delay(PROBE_RESULT_HOLD_MS)
             update(machine.id) { it.copy(transient = null, running = null) }
@@ -211,9 +250,22 @@ class HomeViewModel(
         const val WAKE_ATTEMPTS = 30
         const val POLL_STEP_MS = 3_000L
         const val PROBE_RESULT_HOLD_MS = 6_000L
+        const val HEALTH_EVERY_N_POLLS = 40
         const val MS_PER_SECOND = 1_000L
         const val SECONDS_PER_MINUTE = 60
     }
 }
+
+/** A failure as the few capitals a status chip has room for. */
+fun FailureKind.chip(): String =
+    when (this) {
+        FailureKind.NO_ADDRESS, FailureKind.BAD_NAME, FailureKind.NO_ANSWER, FailureKind.REFUSED -> RELAY_DOWN_CHIP
+        FailureKind.NOT_RECOGNISED -> "NOT RECOGNISED"
+        FailureKind.WRONG_CODE -> "WRONG CODE"
+        FailureKind.NOT_FOUND, FailureKind.OLD_RELAY -> "NOT ON RELAY"
+        FailureKind.REJECTED, FailureKind.OTHER -> "FAILED"
+    }
+
+const val RELAY_DOWN_CHIP = "NO RELAY"
 
 internal fun fmtMs(value: Double): String = String.format(java.util.Locale.US, "%.1f", value)

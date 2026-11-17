@@ -1,18 +1,52 @@
 # wakepc on Windows
 
+The same service runs on Windows, for two different jobs.
+
+## 1. A Windows PC as the relay
+
+The relay is the machine at home that stays on and wakes the others. It does
+not have to be a Raspberry Pi: a spare PC in the garage does the job.
+
+You need Python (`winget install Python.Python.3.13`) and Tailscale on it,
+signed in to the same account as your phone. Then, in a PowerShell window
+opened **as Administrator**, from this folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -Relay
+```
+
+It installs the service to start at boot, offers to stop the PC sleeping
+while plugged in, and prints the address to type into the app. From there the
+app does the rest: it asks the relay to look around your network, you pick
+your PC from the list, and it wakes it while you watch.
+
+Three things keep a relay reachable, and the installer reminds you of each:
+
+- **It must not sleep.** A sleeping relay takes every wake button with it.
+- **It should come back after a power cut.** In its BIOS, set *restore on AC
+  power loss* to *power on*.
+- **Its Tailscale key must not expire.** Disable key expiry for it in the
+  Tailscale admin console. The app warns you two weeks before it would lapse.
+
+This relay mode has not yet been tested on a real Windows machine. The relay's
+network scan there reads `arp -a` and assumes an ordinary home network
+(255.255.255.0). Please report what you see.
+
+## 2. Shutdown buttons for the PC you wake
+
 > **You probably do not need this.** It exists so the phone can shut down,
 > restart or sleep the PC, but any remote desktop tool already does that, and
 > a machine you can remote into is already awake. Waking a machine that is off
 > is the only thing WakePC does that nothing else can, and that lives on the
-> Pi. Install this only if you specifically want those buttons on your phone.
+> relay. Install this only if you specifically want those buttons on your phone.
 
-The Pi can wake this machine, but it cannot shut it down: only the machine
+The relay can wake this machine, but it cannot shut it down: only the machine
 itself can do that. So the same service runs here too, and the PC becomes a
-second connection in the app with its own commands.
+second relay in the app with its own commands.
 
 That means no SSH server, no stored Windows credentials, and no polling delay.
 
-## Install
+### Install
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -31,14 +65,14 @@ Nothing here needs administrator rights, and no firewall rule is required:
 Tailscale's interface is already permitted, so the service is reachable from
 your tailnet and from nowhere else.
 
-## One machine, two relays
+### One machine, two relays
 
 A machine in the app can take commands from more than one connection, so your
-PC shows up as a single card with `wake-pc` (through the Pi) and `shutdown-pc`
+PC shows up as a single card with `wake-pc` (through the relay) and `shutdown-pc`
 (through the PC itself) side by side. In the machine editor the commands are
 grouped by connection: tick whichever you want, from either.
 
-## Commands
+### Commands
 
 `wakepc.conf.example` ships with four, and you can edit
 `%LOCALAPPDATA%\WakePC\wakepc.conf` to add more:

@@ -62,7 +62,7 @@ private val commandsSaver =
 @Composable
 fun EditorScaffold(
     title: String,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -70,57 +70,30 @@ fun EditorScaffold(
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 26.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TintedIcon(
-                R.drawable.ic_back,
-                Palette.dim,
-                modifier = Modifier.clickable(onClick = onBack),
-            )
-            Spacer(modifier = Modifier.size(14.dp))
+            // Null on a fresh install's setup: there is nothing to go back to.
+            if (onBack != null) {
+                TintedIcon(
+                    R.drawable.ic_back,
+                    Palette.dim,
+                    modifier = Modifier.clickable(onClick = onBack),
+                )
+                Spacer(modifier = Modifier.size(14.dp))
+            }
             ConsoleText(title, size = 13, weight = FontWeight.Bold, letterSpacing = 3.0)
         }
         content()
     }
 }
 
-@Composable
-fun EmptyScreen(onAddConnection: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TintedIcon(R.drawable.ic_power_stroke, Palette.red, size = 15.dp)
-            Spacer(modifier = Modifier.size(10.dp))
-            ConsoleText("WAKEPC", size = 13, weight = FontWeight.Bold, letterSpacing = 4.0)
-        }
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 44.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            TintedIcon(R.drawable.ic_power_stroke, Palette.dashed, size = 52.dp)
-            ConsoleText(
-                "no connections yet",
-                size = 15,
-                weight = FontWeight.Medium,
-                modifier = Modifier.padding(top = 28.dp),
-            )
-            androidx.compose.material3.Text(
-                text = "wakepc talks to a tiny service on your pi. add your first connection, and its commands become buttons here.",
-                color = Palette.dim,
-                fontSize = 11.sp,
-                fontFamily = Mono,
-                lineHeight = 21.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.padding(top = 14.dp),
-            )
-        }
-        PrimaryButton(
-            "add connection",
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
-            onClick = onAddConnection,
-        )
-    }
+/** What a passed test found, including anything the relay wants looked at. */
+private fun testSummary(result: RelayCheck.Reachable): String {
+    val buttons = result.commands.joinToString(", ") { it.name }.ifBlank { "none yet" }
+    val notes =
+        result.health
+            ?.warnings
+            .orEmpty()
+            .joinToString("") { "\nnote: $it" }
+    return "ok, reached ${result.connection.name}. buttons: $buttons$notes"
 }
 
 @Composable
@@ -137,6 +110,7 @@ fun ConnectionEditor(
     var baseUrl by rememberSaveable { mutableStateOf("") }
     var fallbackUrl by rememberSaveable { mutableStateOf("") }
     var token by rememberSaveable { mutableStateOf("") }
+    var advanced by rememberSaveable { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
     val newId =
         rememberSaveable {
@@ -155,6 +129,7 @@ fun ConnectionEditor(
             baseUrl = existing.baseUrl
             fallbackUrl = existing.fallbackUrl
             token = existing.token
+            advanced = existing.fallbackUrl.isNotBlank() || existing.token.isNotBlank()
         }
         loaded = true
     }
@@ -163,14 +138,15 @@ fun ConnectionEditor(
     fun draft() =
         Connection(
             id = connectionId ?: newId,
-            name = name.trim(),
+            // Unnamed relays took the name "" and showed up as a blank row.
+            name = name.trim().ifBlank { hostOf(cleanUrl(baseUrl)) },
             color = color,
             baseUrl = cleanUrl(baseUrl),
             fallbackUrl = cleanUrl(fallbackUrl),
             token = cleanToken(token),
         )
 
-    EditorScaffold(if (connectionId == null) "NEW CONNECTION" else "EDIT CONNECTION", onBack = onClosed) {
+    EditorScaffold(if (connectionId == null) "NEW RELAY" else "EDIT RELAY", onBack = onClosed) {
         Column(
             modifier =
                 Modifier
@@ -180,40 +156,50 @@ fun ConnectionEditor(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("NAME")
-                ConsoleField(name, { name = it }, placeholder = "my pi")
+                SectionLabel("ADDRESS")
+                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "its tailscale name, or 100.x.y.z")
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("COLOR")
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    connectionColors.forEach { c ->
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(34.dp)
-                                    .background(Color(c), RoundedCornerShape(6.dp))
-                                    .then(
-                                        if (c == color) {
-                                            Modifier.border(2.dp, Palette.text, RoundedCornerShape(6.dp))
-                                        } else {
-                                            Modifier
-                                        },
-                                    ).clickable { color = c },
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("NAME")
+                ConsoleField(name, { name = it }, placeholder = "my relay")
+            }
+            // The address is the only field most relays need; the rest stays
+            // folded away unless it is already in use.
+            ConsoleText(
+                if (advanced) "hide advanced" else "advanced: colour, fallback address, token",
+                size = 12,
+                color = Palette.sub,
+                modifier = Modifier.clickable { advanced = !advanced }.padding(vertical = 4.dp),
+            )
+            if (advanced) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionLabel("COLOUR")
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        connectionColors.forEach { c ->
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(34.dp)
+                                        .background(Color(c), RoundedCornerShape(6.dp))
+                                        .then(
+                                            if (c == color) {
+                                                Modifier.border(2.dp, Palette.text, RoundedCornerShape(6.dp))
+                                            } else {
+                                                Modifier
+                                            },
+                                        ).clickable { color = c },
+                            )
+                        }
                     }
                 }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("ADDRESS")
-                ConsoleField(baseUrl, { baseUrl = it }, placeholder = "100.x.y.z or host.tailnet.ts.net")
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("FALLBACK ADDRESS · OPTIONAL")
-                ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "e.g. the tailscale IP, tried if the first fails")
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("TOKEN · USUALLY NOT NEEDED")
-                ConsoleField(token, { token = it }, secret = true, placeholder = "leave empty, the relay knows your device")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionLabel("FALLBACK ADDRESS")
+                    ConsoleField(fallbackUrl, { fallbackUrl = it }, placeholder = "tried if the first address fails")
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionLabel("TOKEN")
+                    ConsoleField(token, { token = it }, secret = true, placeholder = "only for a relay without tailscale")
+                }
             }
             Box(
                 modifier =
@@ -225,12 +211,10 @@ fun ConnectionEditor(
                             scope.launch {
                                 testResult = "testing…" to Palette.dim
                                 testResult =
-                                    WakeApi.fetchCommands(draft()).fold(
-                                        onSuccess = { cmds ->
-                                            "ok, found ${cmds.size} commands: ${cmds.joinToString(", ") { it.name }}" to Palette.green
-                                        },
-                                        onFailure = { "failed: ${it.message}" to Palette.red },
-                                    )
+                                    when (val result = checkRelay(WakeApi, draft())) {
+                                        is RelayCheck.Reachable -> testSummary(result) to Palette.green
+                                        is RelayCheck.Unreachable -> result.text to Palette.red
+                                    }
                             }
                         }.padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center,
@@ -238,7 +222,7 @@ fun ConnectionEditor(
                 ConsoleText("test connection", size = 13, color = Palette.green, letterSpacing = 1.0)
             }
             testResult?.let { (text, color) ->
-                ConsoleText(text, size = 12, color = color)
+                androidx.compose.material3.Text(text, color = color, fontSize = 12.sp, fontFamily = Mono, lineHeight = 19.sp)
             }
             if (connectionId != null) {
                 Box(
@@ -262,12 +246,12 @@ fun ConnectionEditor(
                             }.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ConsoleText("delete connection", size = 12, color = Palette.red)
+                    ConsoleText("delete relay", size = 12, color = Palette.red)
                 }
             }
         }
         PrimaryButton(
-            "save connection",
+            "save relay",
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 28.dp),
         ) {
             scope.launch {
@@ -364,7 +348,7 @@ fun MachineEditor(
                 ConsoleField(name, { name = it }, placeholder = "desk pc")
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("CONNECTION")
+                SectionLabel("RELAY")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     connections.forEach { conn ->
                         val isSel = conn.id == connectionId
@@ -417,7 +401,7 @@ fun MachineEditor(
                         ConsoleText(conn.name.uppercase(), size = 11, color = Palette.dim, letterSpacing = 2.0)
                     }
                     if (error != null) {
-                        ConsoleText("couldn't reach: $error", size = 11, color = Palette.red)
+                        ConsoleText(error, size = 11, color = Palette.red, maxLines = 3)
                     }
                     commands.forEach { cmd ->
                         val isSel = selected.any { it.name == cmd.name && it.connectionId == cmd.connectionId }
@@ -487,7 +471,7 @@ fun MachineEditor(
                     }
                 }
                 ConsoleText(
-                    "pick from any connection: wake this machine through the pi, " +
+                    "pick from any relay: wake this machine through the pi, " +
                         "shut it down through the machine itself",
                     size = 11,
                     color = Palette.faint,

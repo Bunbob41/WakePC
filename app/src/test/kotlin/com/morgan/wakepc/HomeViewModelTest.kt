@@ -192,6 +192,84 @@ class HomeViewModelTest {
             vm.viewModelScope.cancel()
         }
 
+    @Test
+    fun `a relay that cannot be reached is shown as that, not as a sleeping pc`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository()
+            val vm = viewModel(fake)
+
+            vm.startPolling()
+            dispatcher.scheduler.runCurrent()
+            assertEquals(Readiness.AWAKE, vm.runtime.value["m1"]?.readiness)
+
+            // The relay drops off: what we knew about the PC is now unknown.
+            fake.statsResult = Result.failure(RelayException(FailureKind.NO_ANSWER, "no answer from my pi"))
+            dispatcher.scheduler.advanceTimeBy(1_500)
+            assertEquals(true, vm.runtime.value["m1"]?.relayDown)
+            assertNull("a stale AWAKE must not survive a dead relay", vm.runtime.value["m1"]?.readiness)
+
+            // And it comes back by itself.
+            fake.statsResult = Result.success(asleep())
+            dispatcher.scheduler.advanceTimeBy(1_000)
+            assertEquals(false, vm.runtime.value["m1"]?.relayDown)
+            assertEquals(Readiness.ASLEEP, vm.runtime.value["m1"]?.readiness)
+            vm.viewModelScope.cancel()
+        }
+
+    @Test
+    fun `a relay that answers with an error is not treated as down`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository()
+            val vm = viewModel(fake)
+
+            vm.startPolling()
+            dispatcher.scheduler.runCurrent()
+            fake.statsResult = Result.failure(RelayException(FailureKind.NOT_FOUND, "unknown command"))
+            dispatcher.scheduler.advanceTimeBy(1_500)
+
+            assertEquals(false, vm.runtime.value["m1"]?.relayDown)
+            vm.viewModelScope.cancel()
+        }
+
+    @Test
+    fun `a wake the relay never received marks the relay down`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { runResult = Result.failure(RelayException(FailureKind.NO_ANSWER, "no answer")) }
+            val vm = viewModel(fake)
+
+            vm.run(machine, connection, wake)
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(
+                "NO RELAY",
+                vm.runtime.value["m1"]
+                    ?.transient
+                    ?.text,
+            )
+            assertEquals(
+                Tone.BAD,
+                vm.runtime.value["m1"]
+                    ?.transient
+                    ?.tone,
+            )
+            advanceUntilIdle()
+            assertEquals(true, vm.runtime.value["m1"]?.relayDown)
+            assertEquals("nothing was sent, so nothing is polled", 0, fake.statsCalls)
+        }
+
+    @Test
+    fun `what a relay wants looked at reaches the home screen`() =
+        runTest(dispatcher) {
+            val fake = FakeWakeRepository().apply { warnings = listOf("this relay's Tailscale key expires in 5 days") }
+            val vm = viewModel(fake)
+
+            vm.startPolling()
+            dispatcher.scheduler.runCurrent()
+
+            assertEquals(mapOf("c1" to fake.warnings), vm.relayNotes.value)
+            vm.viewModelScope.cancel()
+        }
+
     private fun asleep() = PingStats(awake = false, lossPct = 100.0, minMs = null, avgMs = null, maxMs = null)
 
     private fun up() = PingStats(awake = true, lossPct = 0.0, minMs = 1.0, avgMs = 2.0, maxMs = 3.0, ready = false)
@@ -213,6 +291,11 @@ private class FakeWakeRepository : WakeRepository {
     var statsCalls = 0
 
     override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> = Result.success(emptyList())
+
+    var warnings = emptyList<String>()
+
+    override suspend fun health(connection: Connection): Result<RelayHealth> =
+        Result.success(RelayHealth(api = 2, name = "pi", you = null, machines = 1, phoneSetup = true, warnings = warnings))
 
     override suspend fun run(
         connection: Connection,

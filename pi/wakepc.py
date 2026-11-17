@@ -24,7 +24,8 @@ add one while shell commands stay config-only.
     GET    /health                 -> is this relay well, and who are you to it
     GET    /scan                   -> devices on this host's LAN, to pick a PC from
     GET    /machines               -> the registered machines
-    POST   /machines               -> add one: {"name", "mac", "ip"?, "ready"?}
+    POST   /machines               -> add one: {"name", "mac", "ip"?, "ready"?};
+                                      "ready": "auto" picks the port by looking
     PUT    /machines/<id>          -> change one
     DELETE /machines/<id>          -> forget one
     POST   /machines/<id>/wake     -> wake it; ?wait=90 holds the reply until it
@@ -66,6 +67,9 @@ API_VERSION = 2
 MAX_MACHINES = 32
 MAX_BODY = 4096
 MAX_WAIT_S = 180
+# Ports worth waiting for after a wake, most telling first: remote desktop,
+# Windows file sharing, SSH. Each opens well after the machine starts to ping.
+READY_CANDIDATES = (3389, 445, 22)
 WAIT_STEP_S = 2
 # The MAC in wakepc.conf.example. A relay still carrying it wakes nothing.
 PLACEHOLDER_MAC = "aabbccddeeff"
@@ -397,6 +401,31 @@ class MachineStore:
             del self._machines[ident]
             self._commit(before)
             return True
+
+
+def pick_ready_port(ip):
+    """The first candidate port the machine answers on right now, or None.
+
+    A machine is added while it is switched on, so this is the moment to see
+    what it offers. Guessing instead (445 on a PC with file sharing off) would
+    leave every wake stuck at UP, waiting for a port that never opens.
+    """
+    if not ip:
+        return None
+    for port in READY_CANDIDATES:
+        if probe_port(ip, port, timeout=0.6):
+            return port
+    return None
+
+
+def resolve_auto_ready(body: dict) -> dict:
+    """Swap `"ready": "auto"` for a port chosen by looking at the machine."""
+    if body.get("ready") != "auto":
+        return body
+    ip = body.get("ip") or None
+    if ip is not None:
+        ip = clean_lan_ip(ip, "ip")  # never probe an address we would not store
+    return {**body, "ready": pick_ready_port(ip)}
 
 
 def machine_command(machine: dict) -> Command:
@@ -1061,7 +1090,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/machines":
             return self._change_machines(
-                lambda: (201, machine_json(self.store.add(validate_machine(self._body()))))
+                lambda: (201, machine_json(
+                    self.store.add(validate_machine(resolve_auto_ready(self._body())))
+                ))
             )
         if not self._authorized():
             return self._reply(401, {"error": "unauthorized"})
@@ -1106,7 +1137,10 @@ class Handler(BaseHTTPRequestHandler):
         def change():
             if machine is None:
                 return 404, {"error": "unknown machine"}
-            fields = validate_machine(self._body(), base=machine)
+            body = self._body()
+            if body.get("ready") == "auto":
+                body = resolve_auto_ready({"ip": machine["ip"], **body})
+            fields = validate_machine(body, base=machine)
             return 200, machine_json(self.store.update(machine["id"], fields))
 
         self._change_machines(change)
