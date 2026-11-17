@@ -94,7 +94,10 @@ class HomeViewModel(
             val pingCmd = machine.commands.firstOrNull { it.ping } ?: return@forEach
             val connection = state.value.connectionFor(machine, pingCmd) ?: return@forEach
             if (_runtime.value[machine.id]?.running != null) return@forEach
-            api.stats(connection, pingCmd.name).fold(
+            val result = api.stats(connection, pingCmd.name)
+            // A wake may have started while this was in flight; it owns the card now.
+            if (_runtime.value[machine.id]?.running != null) return@forEach
+            result.fold(
                 onSuccess = { stats ->
                     update(machine.id) {
                         it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs, relayDown = false)
@@ -105,6 +108,8 @@ class HomeViewModel(
                     // that answered with an error is still there.
                     if (failure.failureKind.relayDown) {
                         update(machine.id) { it.copy(awake = null, ready = null, relayDown = true) }
+                    } else {
+                        update(machine.id) { it.copy(relayDown = false) }
                     }
                 },
             )
@@ -160,7 +165,7 @@ class HomeViewModel(
             val now = api.status(connection, command.name).getOrNull()
             if (now != null) last = now
             if (now?.usable == true) {
-                update(machine.id) { it.copy(awake = true, ready = now.readyFlag, transient = null) }
+                update(machine.id) { it.copy(awake = true, ready = now.readyFlag, transient = null, relayDown = false) }
                 return
             }
             val word = if (now == Readiness.UP) "UP" else "WAKING"
@@ -184,6 +189,8 @@ class HomeViewModel(
         setTransient(machine.id, "RUNNING", Tone.ACTIVE, pulse = true, glow = true)
         val failure = api.run(connection, command.name, confirmCode).exceptionOrNull()
         val ok = failure == null
+        // Any answer at all means the relay is there; only silence means it is not.
+        update(machine.id) { it.copy(relayDown = failure?.failureKind?.relayDown == true) }
         flash(machine.id, if (ok) "OK" else failure.failureKind.chip(), if (ok) Tone.GOOD else Tone.BAD, glow = ok, holdMs = 2_500)
     }
 
@@ -198,7 +205,9 @@ class HomeViewModel(
             setTransient(machine.id, "PROBING · 5 PINGS", Tone.ACTIVE, pulse = true, glow = true)
             api.stats(connection, command.name, count = 5).fold(
                 onSuccess = { stats ->
-                    update(machine.id) { it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs) }
+                    update(machine.id) {
+                        it.copy(awake = stats.awake, ready = stats.ready, avgMs = stats.avgMs ?: it.avgMs, relayDown = false)
+                    }
                     val text =
                         stats.avgMs?.let { avg ->
                             "${fmtMs(stats.minMs ?: avg)}/${fmtMs(avg)}/${fmtMs(stats.maxMs ?: avg)}MS · " +
@@ -210,7 +219,10 @@ class HomeViewModel(
                         setTransient(machine.id, "NO REPLY · 100% LOSS", Tone.BAD, glow = false)
                     }
                 },
-                onFailure = { setTransient(machine.id, it.failureKind.chip(), Tone.BAD, glow = false) },
+                onFailure = { failure ->
+                    update(machine.id) { it.copy(relayDown = failure.failureKind.relayDown) }
+                    setTransient(machine.id, failure.failureKind.chip(), Tone.BAD, glow = false)
+                },
             )
             delay(PROBE_RESULT_HOLD_MS)
             update(machine.id) { it.copy(transient = null, running = null) }

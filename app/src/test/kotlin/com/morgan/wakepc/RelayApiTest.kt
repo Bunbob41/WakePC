@@ -65,6 +65,9 @@ class RelayApiTest {
         assertEquals(FailureKind.NO_ANSWER, transportFailure(ConnectException("Network is unreachable")).kind)
         assertEquals(FailureKind.REFUSED, transportFailure(ConnectException("Connection refused")).kind)
         assertEquals(FailureKind.REFUSED, transportFailure(ConnectException("failed to connect: ECONNREFUSED (Connection refused)")).kind)
+        // What OkHttp really throws: the reason is in the cause, not the message.
+        val wrapped = ConnectException("Failed to connect to /100.64.0.2:8787").apply { initCause(ConnectException("Connection refused")) }
+        assertEquals(FailureKind.REFUSED, transportFailure(wrapped).kind)
         assertEquals(FailureKind.BAD_NAME, transportFailure(UnknownHostException("pi-nd")).kind)
         assertEquals(FailureKind.OTHER, transportFailure(IllegalStateException("odd")).kind)
     }

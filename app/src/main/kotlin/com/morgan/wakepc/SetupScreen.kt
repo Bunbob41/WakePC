@@ -31,8 +31,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val STEP_ADDRESS = "address"
 private const val STEP_PICK = "pick"
@@ -128,18 +130,16 @@ private fun ColumnScope.AddressStep(
             )
         }
         failure?.let { failed ->
-            // Three links, in order, so the broken one is the one marked.
-            val vpnOff = WakeApi.vpnLooksOff()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CheckLine(!vpnOff, "tailscale is on, on this phone")
-                CheckLine(if (vpnOff) null else !failed.kind.relayDown, "the relay answers")
-                CheckLine(
-                    when {
-                        failed.kind.relayDown -> null
-                        else -> failed.kind != FailureKind.NOT_RECOGNISED
-                    },
-                    "the relay recognises this phone",
-                )
+                // Three links, in order, so the broken one is the one marked.
+                // Only when one of them is what broke: three ticks above an
+                // unrelated error would say everything is fine.
+                if (failed.kind.relayDown || failed.kind == FailureKind.NOT_RECOGNISED) {
+                    val vpnOff = failed.kind.relayDown && WakeApi.vpnLooksOff()
+                    CheckLine(!vpnOff, "tailscale is on, on this phone")
+                    CheckLine(if (vpnOff) null else !failed.kind.relayDown, "the relay answers")
+                    CheckLine(if (failed.kind.relayDown) null else false, "the relay recognises this phone")
+                }
                 Prose(failed.text, Palette.red)
             }
         }
@@ -195,6 +195,9 @@ private fun ColumnScope.PickStep(
     var saveError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(connection.id, scanRound) {
+        // A retry after a failure shows that it is trying again; a rescan of
+        // a relay we already reached keeps the rest of the screen in place.
+        if (check !is RelayCheck.Reachable) check = null
         devices = null
         scanError = null
         val result = checkRelay(api, connection)
@@ -211,7 +214,10 @@ private fun ColumnScope.PickStep(
     val commands = reachable?.let { unusedCommands(state, connection, it.commands) }.orEmpty()
     val pickedDevice = devices?.firstOrNull { it.mac == pickedMac }
     val handMac = if (byHand) cleanMac(typedMac) else null
-    val ready = pickedDevice != null || pickedCommand != null || handMac != null
+    // Resolved against what the relay offers now: a remembered pick that is
+    // no longer on offer must not leave the button up with nothing behind it.
+    val command = commands.firstOrNull { it.name == pickedCommand }
+    val ready = pickedDevice != null || command != null || handMac != null
 
     StepBody {
         if (state.connections.size > 1) {
@@ -267,6 +273,8 @@ private fun ColumnScope.PickStep(
                             pickedCommand = cmd.name
                             pickedMac = null
                             byHand = false
+                            // Not whatever a device tapped earlier left in the field.
+                            name = cmd.name.removePrefix("wake-").replace('-', ' ')
                         }
                     }
                 }
@@ -287,26 +295,30 @@ private fun ColumnScope.PickStep(
             scope.launch {
                 saving = true
                 saveError = null
-                val command = commands.firstOrNull { it.name == pickedCommand }
+                // Not cancellable: backing out between the relay taking the
+                // machine and the app saving it would leave it on the relay
+                // only, greyed out in the list as "already added".
                 val machine =
-                    if (command != null) {
-                        machineFor(connection, finalName, command)
-                    } else {
-                        api
-                            .addMachine(connection, finalName, pickedDevice?.mac ?: handMac.orEmpty(), pickedDevice?.ip)
-                            .fold(
-                                onSuccess = { machineFor(connection, finalName, it) },
-                                onFailure = {
-                                    saveError = it.message
-                                    null
-                                },
-                            )
+                    withContext(NonCancellable) {
+                        val made =
+                            if (command != null) {
+                                machineFor(connection, finalName, command)
+                            } else {
+                                api
+                                    .addMachine(connection, finalName, pickedDevice?.mac ?: handMac.orEmpty(), pickedDevice?.ip)
+                                    .fold(
+                                        onSuccess = { machineFor(connection, finalName, it) },
+                                        onFailure = {
+                                            saveError = it.message
+                                            null
+                                        },
+                                    )
+                            }
+                        if (made != null) store.update { it.withMachine(made) }
+                        made
                     }
                 saving = false
-                if (machine != null) {
-                    store.update { it.withMachine(machine) }
-                    onAdded(machine.id)
-                }
+                if (machine != null) onAdded(machine.id)
             }
         }
     }

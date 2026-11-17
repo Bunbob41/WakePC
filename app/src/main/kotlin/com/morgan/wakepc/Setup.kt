@@ -81,7 +81,9 @@ fun machineFor(
         name = name,
         connectionId = connection.id,
         // Without an address the relay cannot ping it, so there is no status to show.
-        commands = listOf(CommandRef(relayMachine.commandName, ping = relayMachine.ip != null)),
+        // The relay is named on the command too, as the machine editor does:
+        // it matches commands by relay, and would otherwise show this one unticked.
+        commands = listOf(CommandRef(relayMachine.commandName, ping = relayMachine.ip != null, connectionId = connection.id)),
     )
 
 /** A machine built around a command the relay already had, for relays set up by hand. */
@@ -89,7 +91,7 @@ fun machineFor(
     connection: Connection,
     name: String,
     command: CommandRef,
-): Machine = Machine(name = name, connectionId = connection.id, commands = listOf(command.copy(connectionId = null)))
+): Machine = Machine(name = name, connectionId = connection.id, commands = listOf(command.copy(connectionId = connection.id)))
 
 /** Save a relay, replacing an earlier save of the same one. */
 fun AppState.withConnection(connection: Connection): AppState =

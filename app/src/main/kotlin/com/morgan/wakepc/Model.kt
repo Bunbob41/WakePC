@@ -239,7 +239,7 @@ internal fun decodeState(json: String): AppState =
                                 CommandRef(
                                     name = c.getString("name"),
                                     ping = c.optBoolean("ping"),
-                                    connectionId = c.optString("connectionId").takeIf { it.isNotBlank() },
+                                    connectionId = c.textOrNull("connectionId"),
                                     elevated = c.optBoolean("elevated"),
                                 )
                             },
@@ -254,6 +254,15 @@ internal fun decodeState(json: String): AppState =
             longPin = root.optString("longPin"),
         )
     }.getOrDefault(AppState())
+
+/**
+ * A string field that may be JSON null. Android's org.json turns a null into
+ * the word "null" in optString, where the library the unit tests run against
+ * gives "". Left alone, a command saved with no relay of its own came back
+ * pointing at a relay called "null", and its machine could do nothing.
+ */
+internal fun JSONObject.textOrNull(key: String): String? =
+    if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() && it != "null" }
 
 private fun refJson(ref: ButtonRef) = JSONObject().put("machineId", ref.machineId).put("command", ref.command)
 

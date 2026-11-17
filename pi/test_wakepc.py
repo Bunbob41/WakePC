@@ -470,6 +470,26 @@ class MachineStoreTest(unittest.TestCase):
         with mock.patch("builtins.print"):
             self.assertEqual(wakepc.MachineStore(self.path).all(), [])
 
+    def test_a_hand_edited_file_cannot_crash_or_cheat(self):
+        os.makedirs(os.path.dirname(self.path))
+        good = {"id": "desk-pc", "name": "Desk PC", "mac": "3c7c3f123456", "ip": "192.168.1.50",
+                "ready": 445, "broadcast_ip": "192.168.1.255"}
+        for content in ({"machines": 5}, {"machines": None}, [1, 2], "text"):
+            with open(self.path, "w") as handle:
+                json.dump(content, handle)
+            self.assertEqual(wakepc.MachineStore(self.path).all(), [])
+        entries = [
+            good,
+            {**good, "id": "copy"},                      # same MAC twice
+            {**good, "id": "odd", "mac": "3c7c3f123457", "ready": "²"},
+            {**good, "id": "pc", "mac": "3c7c3f123458"},  # would shadow the config's wake-pc
+            "not an object",
+        ]
+        with open(self.path, "w") as handle:
+            json.dump({"machines": entries}, handle)
+        store = wakepc.MachineStore(self.path, reserved={"wake-pc"})
+        self.assertEqual([m["id"] for m in store.all()], ["desk-pc"])
+
     def test_a_machine_is_also_a_command_older_apps_can_press(self):
         write_config(VALID)
         config = wakepc.load_config()
@@ -752,6 +772,70 @@ class MachinesApiTest(unittest.TestCase):
                 mock.patch.object(wakepc, "probe_port", return_value=False):
             code, body = self.call("GET", "/machines/desk-pc/status")
         self.assertEqual((code, body["state"], body["awake"], body["ready"]), (200, "up", True, False))
+
+    def test_a_strange_ready_value_is_refused_not_fatal(self):
+        # "²" passes str.isdigit and then int() rejects it: that once killed the handler.
+        for bad in ("²", "٣", True, 4.5, 0, {"a": 1}):
+            with self.subTest(bad):
+                self.assertEqual(self.add(ready=bad)[0], 400)
+
+    def test_wake_packets_only_go_to_the_home_network(self):
+        self.assertEqual(self.add(broadcast_ip="8.8.8.8")[0], 400)
+        self.assertEqual(self.add(broadcast_ip="224.0.0.1")[0], 400)
+        self.assertEqual(self.add(broadcast_ip="255.255.255.255")[0], 201)
+
+    def test_addresses_that_are_private_in_name_only_are_refused(self):
+        for bad in ("0.0.0.1", "240.0.0.1", "255.255.255.255", "192.0.2.5", "198.18.0.1"):
+            with self.subTest(bad):
+                self.assertEqual(self.add(ip=bad)[0], 400)
+
+    def test_dropping_the_address_drops_its_port_check(self):
+        self.add(ready=445)
+        code, changed = self.call("PUT", "/machines/desk-pc", {"ip": None})
+        self.assertEqual((code, changed["ip"], changed["ready"]), (200, None, None))
+
+    def test_resending_the_same_address_keeps_a_chosen_broadcast(self):
+        self.add(broadcast_ip="192.168.1.127")
+        changed = self.call("PUT", "/machines/desk-pc", {"ip": "192.168.1.50", "name": "Tower"})[1]
+        self.assertEqual(changed["broadcast_ip"], "192.168.1.127")
+        moved = self.call("PUT", "/machines/desk-pc", {"ip": "192.168.1.60"})[1]
+        self.assertEqual(moved["broadcast_ip"], "192.168.1.255")
+
+    def test_a_change_to_a_machine_removed_meanwhile_does_not_bring_it_back(self):
+        self.add()
+        store = wakepc.Handler.store
+        fields = wakepc.validate_machine({"name": "Tower"}, base=store.get("desk-pc"))
+        store.remove("desk-pc")
+        self.assertIsNone(store.update("desk-pc", fields))
+        self.assertEqual(store.all(), [])
+
+    def test_registering_a_machine_does_not_move_the_legacy_wake(self):
+        self.add(name="Aardvark", mac="3C:7C:3F:12:34:99")
+        with mock.patch.object(wakepc, "send_magic_packet") as send:
+            self.assertEqual(self.call("POST", "/wake")[0], 200)
+        # Still the config's wake-pc, not the newly registered machine.
+        send.assert_called_once_with("3c7c3f123456", "192.168.1.255")
+
+    def test_a_page_on_another_site_cannot_post_through_a_browser(self):
+        def post(path, origin):
+            request = urllib.request.Request(
+                self.base + path, method="POST", data=b"{}",
+                headers={"Authorization": "Bearer test-token", "Origin": origin},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    return response.status
+            except urllib.error.HTTPError as error:
+                with error:
+                    return error.code
+
+        self.add()
+        with mock.patch.object(wakepc, "send_magic_packet") as send, mock.patch("builtins.print"):
+            self.assertEqual(post("/machines/desk-pc/wake", "https://evil.example"), 403)
+            self.assertEqual(post("/run/wake-pc", "https://evil.example"), 403)
+            send.assert_not_called()
+            # The relay's own panel is the same origin, and is let through.
+            self.assertEqual(post("/machines/desk-pc/wake", self.base), 200)
 
     def test_scan_is_served(self):
         with mock.patch.object(wakepc, "scan_lan", return_value={"networks": [], "devices": []}):

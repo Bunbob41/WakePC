@@ -124,7 +124,7 @@ class SetupTest {
         val machine = machineFor(connection, "Desk PC", relayMachine)
         val state = AppState().withConnection(connection).withMachine(machine)
 
-        assertEquals(listOf(CommandRef("wake-desk-pc", ping = true)), machine.commands)
+        assertEquals(listOf(CommandRef("wake-desk-pc", ping = true, connectionId = "c1")), machine.commands)
         assertEquals(ButtonRef(machine.id, "wake-desk-pc"), state.hero)
         assertEquals(state.hero, state.tile)
         assertEquals("my pi", state.resolve(state.hero)?.connection?.name)
@@ -132,6 +132,41 @@ class SetupTest {
         // A second machine does not take the button over.
         val second = machineFor(connection, "Server", relayMachine.copy(id = "server"))
         assertEquals(state.hero, state.withMachine(second).hero)
+    }
+
+    @Test
+    fun `a machine from setup survives being saved and loaded`() {
+        val connection = pi.copy(name = "my pi")
+        val machine = machineFor(connection, "Desk PC", RelayMachine("desk-pc", "Desk PC", "3c:7c:3f:12:34:56", "192.168.1.50", null))
+        val loaded = decodeState(encodeState(AppState().withConnection(connection).withMachine(machine)))
+
+        assertEquals("my pi", loaded.resolve(loaded.hero)?.connection?.name)
+        // Already behind a button, so setup does not offer it a second time.
+        assertEquals(emptyList<CommandRef>(), unusedCommands(loaded, connection, machine.commands))
+    }
+
+    @Test
+    fun `a command saved with no relay of its own loads as that, on a phone too`() {
+        // Android's org.json reads a JSON null back as the word "null". A
+        // command that came back pointing at a relay called "null" resolved
+        // to nothing, and every button on its machine went dead.
+        val saved =
+            """{"connections": [{"id": "c1", "name": "my pi", "baseUrl": "http://pi:8787"}],
+               "machines": [{"id": "m1", "name": "desk", "connectionId": "c1", "commands": [
+                 {"name": "wake-pc", "ping": true, "connectionId": null},
+                 {"name": "wake-b", "ping": true, "connectionId": "null"},
+                 {"name": "wake-c", "ping": true}]}],
+               "hero": {"machineId": "m1", "command": "wake-b"}}"""
+        val loaded = decodeState(saved)
+
+        assertEquals(
+            listOf(null, null, null),
+            loaded.machines
+                .single()
+                .commands
+                .map { it.connectionId },
+        )
+        assertEquals("my pi", loaded.resolve(loaded.hero)?.connection?.name)
     }
 
     @Test

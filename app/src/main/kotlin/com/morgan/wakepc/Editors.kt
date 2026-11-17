@@ -100,6 +100,8 @@ private fun testSummary(result: RelayCheck.Reachable): String {
 fun ConnectionEditor(
     store: Store,
     connectionId: String?,
+    /** Open the folded fields at once: setup's "advanced" link came here for them. */
+    startAdvanced: Boolean = false,
     onSaved: () -> Unit,
     onClosed: () -> Unit,
 ) {
@@ -130,6 +132,8 @@ fun ConnectionEditor(
             fallbackUrl = existing.fallbackUrl
             token = existing.token
             advanced = existing.fallbackUrl.isNotBlank() || existing.token.isNotBlank()
+        } else {
+            advanced = startAdvanced
         }
         loaded = true
     }

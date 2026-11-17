@@ -55,7 +55,7 @@ class WakeTileService : TileService() {
                     when (failure.failureKind) {
                         FailureKind.NOT_RECOGNISED -> "$relay doesn't recognise this phone"
                         FailureKind.NOT_FOUND, FailureKind.OLD_RELAY -> "$relay no longer has this button"
-                        else -> "Couldn't reach $relay"
+                        else -> if (failure.failureKind.relayDown) "Couldn't reach $relay" else "$relay couldn't do that"
                     }
                 updateTile(subtitle = why, state = Tile.STATE_INACTIVE)
                 return@launch

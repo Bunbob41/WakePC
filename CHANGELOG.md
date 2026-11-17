@@ -50,6 +50,8 @@ file on the Pi and filling in two forms, with nothing checked until the end.
   replies once the machine is usable, for callers that are not the app.
 - An unedited example config no longer offers a wake button that wakes
   nothing, and the example ships with no commands.
+- A web page open in a browser on one of your devices can no longer make that
+  browser send commands to the relay.
 - Each machine also appears as the command `wake-<id>`, so older versions of
   the app and the panel can use it.
 

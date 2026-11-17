@@ -108,8 +108,6 @@ internal fun parseMachine(body: String): RelayMachine {
     )
 }
 
-private fun JSONObject.textOrNull(key: String): String? = if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
-
 private fun JSONArray?.strings(): List<String> = if (this == null) emptyList() else (0 until length()).map { optString(it) }
 
 /** Which link in the chain broke. The words shown to the user come from [failureText]. */
@@ -256,7 +254,9 @@ internal fun transportFailure(failure: Throwable): RelayException =
         }
 
         is ConnectException -> {
-            if (failure.message.orEmpty().contains("refused", ignoreCase = true)) {
+            // OkHttp wraps the real error: "Failed to connect to host" on the
+            // outside, "Connection refused" only further down the chain.
+            if (generateSequence<Throwable>(failure) { it.cause }.any { it.message.orEmpty().contains("refused", ignoreCase = true) }) {
                 RelayException(FailureKind.REFUSED, "connection refused", failure)
             } else {
                 RelayException(FailureKind.NO_ANSWER, failure.message ?: "unreachable", failure)
@@ -337,7 +337,7 @@ object WakeApi : WakeRepository {
             .build()
 
     override suspend fun fetchCommands(connection: Connection): Result<List<CommandRef>> =
-        request(connection, "commands").map { body ->
+        request(connection, "commands").parsed(connection) { body ->
             val array = JSONObject(body).getJSONArray("commands")
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
@@ -365,13 +365,13 @@ object WakeApi : WakeRepository {
         count: Int,
     ): Result<PingStats> =
         request(connection, "status/$command?count=$count", extras = Extras(slow = count > 1))
-            .map(::parseStats)
+            .parsed(connection, ::parseStats)
 
     override suspend fun health(connection: Connection): Result<RelayHealth> =
-        request(connection, "health").map(::parseHealth).notFoundMeansOld()
+        request(connection, "health").parsed(connection, ::parseHealth).notFoundMeansOld()
 
     override suspend fun scan(connection: Connection): Result<List<LanDevice>> =
-        request(connection, "scan", extras = Extras(slow = true)).map(::parseScan).notFoundMeansOld()
+        request(connection, "scan", extras = Extras(slow = true)).parsed(connection, ::parseScan).notFoundMeansOld()
 
     override suspend fun addMachine(
         connection: Connection,
@@ -388,13 +388,33 @@ object WakeApi : WakeRepository {
             "machines",
             method = "POST",
             extras = Extras(body = body.toString()),
-        ).map(::parseMachine).notFoundMeansOld()
+        ).parsed(connection, ::parseMachine).notFoundMeansOld()
     }
 
     override suspend fun removeMachine(
         connection: Connection,
         id: String,
     ): Result<Unit> = request(connection, "machines/$id", method = "DELETE").map { }
+
+    /**
+     * Read a reply, turning one that is not a relay's into a failure. A
+     * mistyped address can reach something else that answers 200, and its
+     * page must not crash the app halfway through setup.
+     */
+    private fun <T> Result<String>.parsed(
+        connection: Connection,
+        read: (String) -> T,
+    ): Result<T> =
+        mapCatching(read).recoverCatching { failure ->
+            if (failure is RelayException) throw failure
+            val text = "${connection.name.ifBlank {
+                hostOf(
+                    connection.baseUrl,
+                )
+            }} answered, but not like a wakepc relay: is the address right?"
+            AppLog.log(text, ok = false)
+            throw RelayException(FailureKind.OTHER, text, failure)
+        }
 
     /** A relay from before machines answers 404 to these routes. */
     private fun <T> Result<T>.notFoundMeansOld(): Result<T> =

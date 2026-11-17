@@ -135,6 +135,38 @@ machine is on at that moment, so the relay tries 3389, 445 and 22 and keeps
 the first that answers, or none. A fixed default of 445 would have left every
 wake stuck at UP on a PC with file sharing off.
 
+**Review pass.** Two independent reviews of this work found, and this fixed:
+
+- A machine added in setup was unusable on a real phone. Its command was
+  saved with a null relay id, and Android's `org.json` reads a JSON null back
+  through `optString` as the word "null", where the library the unit tests
+  use gives "". The command then pointed at a relay called "null". Decoding
+  now treats both as null, and setup stamps the relay id on the command as
+  the machine editor always did. Worth remembering: **the JVM tests do not
+  run Android's JSON parser**, so a null written to state needs this care.
+- "Connection refused" was never recognised, because OkHttp puts it in the
+  exception's cause, not its message.
+- A reply that was not relay JSON (a mistyped address reaching some other
+  server) crashed the app instead of failing the step.
+- On the relay: a `ready` value like "²" crashed a handler and, in the state
+  file, startup; `broadcast_ip` could be any address; "private" admitted
+  ranges no home network uses; a failed rebind could fall back to every
+  interface; registering a machine changed what the legacy `/wake` hit.
+- Cross-site requests. On the tailnet the caller's address is its whole
+  credential, so a web page open on a trusted device could make the browser
+  post to the relay. State-changing requests carrying an `Origin` that is not
+  the relay's own are now refused. This covered `/run` before this work too.
+
+**Known gaps.**
+
+- An authorised caller can register a machine at any private address and a
+  port of its choosing, then read whether that port is open. The address is
+  limited to the three private ranges, not to the relay's own subnet, because
+  subnet detection is a guess on Windows and macOS.
+- DNS rebinding is not defended against: the relay does not check `Host`.
+- A wake's progress on the setup screen is lost on rotation; the wake itself
+  carries on.
+
 **Not verified.** No emulator runs in CI or in the session that wrote this,
 so the three screens have been compiled and their logic tested, but not seen.
 The Windows relay mode (`install.ps1 -Relay`) has not been run on Windows.

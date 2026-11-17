@@ -155,6 +155,7 @@ private fun App(store: Store) {
             ConnectionEditor(
                 store = store,
                 connectionId = s.id,
+                startAdvanced = s.fromEmpty,
                 // Saved from setup's advanced link: carry on into picking the PC.
                 onSaved = { screen = if (s.fromEmpty) Screen.Setup else Screen.Settings },
                 onClosed = { screen = if (s.fromEmpty) Screen.Setup else Screen.Settings },

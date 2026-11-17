@@ -61,6 +61,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # installer points here with WAKEPC_CONFIG instead of patching the source.
 CONFIG_PATH = os.environ.get("WAKEPC_CONFIG", "/etc/wakepc.conf")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+PORT_RE = re.compile(r"[0-9]{1,5}")
 
 # What /health reports, so an app can tell an old relay from a current one.
 API_VERSION = 2
@@ -147,7 +148,7 @@ def load_config():
         ready_raw = parser[section].get("ready", "").strip()
         ready = None
         if ready_raw:
-            if not ready_raw.isdigit() or not 1 <= int(ready_raw) <= 65535:
+            if not PORT_RE.fullmatch(ready_raw) or not 1 <= int(ready_raw) <= 65535:
                 sys.exit(f"error: [{section}] ready must be a TCP port number, 1 to 65535")
             if ping is None:
                 sys.exit(f"error: [{section}] ready needs a ping address to check the port on")
@@ -216,15 +217,19 @@ def format_mac(mac_hex: str) -> str:
     return ":".join(mac_hex[i:i + 2] for i in range(0, 12, 2))
 
 
+# The ranges a home network is numbered from. Python's is_private is far
+# wider (0.0.0.0/8, 240.0.0.0/4, the documentation ranges), and none of
+# those is somewhere a PC lives.
+HOME_NETS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
 def _lan_like(addr) -> bool:
-    """A home-network address: private IPv4, and not ours on the tailnet."""
-    return (
-        addr.version == 4
-        and addr.is_private
-        and not addr.is_loopback
-        and not addr.is_unspecified
-        and not addr.is_link_local
-    )
+    """A home-network address: one of the private IPv4 ranges."""
+    return addr.version == 4 and any(addr in net for net in HOME_NETS)
 
 
 def clean_lan_ip(raw, what: str) -> str:
@@ -263,24 +268,33 @@ def validate_machine(body: dict, base=None) -> dict:
     ip = merged.get("ip") or None
     if ip is not None:
         ip = clean_lan_ip(ip, "ip")
+    elif base and "ready" not in body:
+        merged["ready"] = None  # the address went, and its port check goes with it
     ready = merged.get("ready")
     if ready in ("", None):
         ready = None
     else:
-        if isinstance(ready, bool) or not str(ready).isdigit() or not 1 <= int(ready) <= 65535:
+        # Not str.isdigit: that also accepts characters like "²", which int() then rejects.
+        if isinstance(ready, bool) or not PORT_RE.fullmatch(str(ready)) or not 1 <= int(ready) <= 65535:
             raise BadRequest("ready must be a TCP port number, 1 to 65535")
         if ip is None:
             raise BadRequest("ready needs an ip to check the port on")
         ready = int(ready)
     broadcast = merged.get("broadcast_ip") or None
-    if broadcast is None or (base and "ip" in body and "broadcast_ip" not in body):
-        # Not given, or the machine just moved: work it out from our own LAN.
+    moved = bool(base) and ip != base.get("ip") and "broadcast_ip" not in body
+    if broadcast is None or moved:
+        # Not given, or the machine really moved: work it out from our own LAN.
         broadcast = broadcast_for(ip)
     else:
         try:
-            broadcast = str(ipaddress.IPv4Address(str(broadcast).strip()))
+            parsed = ipaddress.IPv4Address(str(broadcast).strip())
         except ValueError:
             raise BadRequest("broadcast_ip must be an IPv4 address") from None
+        # Wake packets go here, so it gets the same limit as the address:
+        # the home network, or the all-ones broadcast.
+        if str(parsed) != "255.255.255.255" and not _lan_like(parsed):
+            raise BadRequest("broadcast_ip must be on the home network")
+        broadcast = str(parsed)
     return {
         "name": clean_name(merged["name"]),
         "mac": clean_mac(merged["mac"]),
@@ -315,15 +329,22 @@ class MachineStore:
         except (OSError, ValueError) as exc:
             print(f"warning: could not read {self.path} ({exc}), starting with no machines")
             return {}
-        machines = {}
-        for item in raw.get("machines", []) if isinstance(raw, dict) else []:
+        items = raw.get("machines") if isinstance(raw, dict) else None
+        machines, macs = {}, set()
+        for item in items if isinstance(items, list) else []:
+            if len(machines) >= MAX_MACHINES:
+                break
             try:
                 ident = item["id"]
                 if not NAME_RE.match(ident) or not NAME_RE.match(f"wake-{ident}"):
                     continue
-                machines[ident] = {"id": ident, **validate_machine(item)}
-            except (BadRequest, KeyError, TypeError):
+                fields = validate_machine(item)
+            except (ValueError, KeyError, TypeError):  # BadRequest is a ValueError
                 continue  # one bad entry should not take the rest down
+            if fields["mac"] in macs or f"wake-{ident}" in self._reserved:
+                continue  # a hand edit must not get past what add() enforces
+            macs.add(fields["mac"])
+            machines[ident] = {"id": ident, **fields}
         return machines
 
     def _save(self) -> None:
@@ -383,8 +404,11 @@ class MachineStore:
             self._commit(before)
             return dict(self._machines[ident])
 
-    def update(self, ident, fields: dict) -> dict:
+    def update(self, ident, fields: dict):
+        """The changed machine, or None if it was removed in the meantime."""
         with self._lock:
+            if ident not in self._machines:
+                return None
             for other in self._machines.values():
                 if other["id"] != ident and other["mac"] == fields["mac"]:
                     raise BadRequest(f"that machine is already here as {other['name']}")
@@ -446,11 +470,12 @@ def machine_json(machine: dict) -> dict:
 
 def all_commands(config, store) -> dict:
     """Config commands plus one wake command per machine; the config wins."""
-    merged = {}
+    # Config first: the legacy /wake and /status routes act on the first
+    # match, and registering a machine must not change what they hit.
+    merged = dict(config["commands"])
     for machine in store.all():
         cmd = machine_command(machine)
-        merged[cmd.name] = cmd
-    merged.update(config["commands"])
+        merged.setdefault(cmd.name, cmd)
     return merged
 
 
@@ -637,7 +662,10 @@ def scan_lan(store, settle: float = 1.5) -> dict:
             own = {str(iface.ip) for iface in networks}
             seen = {}
             for ip, mac in read_neighbours():
-                addr = ipaddress.ip_address(ip)
+                try:
+                    addr = ipaddress.ip_address(ip)
+                except ValueError:
+                    continue  # "999.1.1.1" matches the pattern and is not an address
                 if ip in own or not any(addr in iface.network for iface in networks):
                     continue
                 seen[ip] = mac
@@ -1016,6 +1044,24 @@ class Handler(BaseHTTPRequestHandler):
         machine = self.store.get(parts[0]) if parts and parts[0] else None
         return machine, "/".join(parts[1:])
 
+    def _cross_site(self) -> bool:
+        """True for a request a web page on another site made the browser send.
+
+        On the tailnet the caller's address is its whole credential, and a
+        browser on a trusted device carries that address for any page it has
+        open. Such a page cannot read our replies, but it could post. Browsers
+        mark those requests with an Origin that is not ours; the panel's own
+        requests, the app and scripts either match or send none.
+        """
+        origin = self.headers.get("Origin")
+        if not origin:
+            return False
+        ours = self.headers.get("Host", "")
+        if urllib.parse.urlparse(origin).netloc.lower() == ours.lower() and ours:
+            return False
+        print(f"refused a cross-site request from {origin}", flush=True)
+        return True
+
     def _change_machines(self, change) -> None:
         """Run a change to the machine list, turning its failures into replies.
         Registering a wake target is the one thing a phone may set up here."""
@@ -1025,7 +1071,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(403, {"error": "phone setup is turned off on this relay"})
         try:
             code, body = change()
-        except BadRequest as exc:
+        except ValueError as exc:  # BadRequest, or anything a strange value tripped
             return self._reply(400, {"error": str(exc)})
         except StorageError as exc:
             print(str(exc), flush=True)
@@ -1087,6 +1133,8 @@ class Handler(BaseHTTPRequestHandler):
         self._reply(404, {"error": "not found"})
 
     def do_POST(self):
+        if self._cross_site():
+            return self._reply(403, {"error": "cross-site request refused"})
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/machines":
             return self._change_machines(
@@ -1130,6 +1178,8 @@ class Handler(BaseHTTPRequestHandler):
         self._reply(404, {"error": "not found"})
 
     def do_PUT(self):
+        if self._cross_site():
+            return self._reply(403, {"error": "cross-site request refused"})
         machine, action = self._machine_route(urllib.parse.urlparse(self.path).path)
         if not self.path.startswith("/machines/") or action:
             return self._reply(404, {"error": "not found"})
@@ -1140,12 +1190,16 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             if body.get("ready") == "auto":
                 body = resolve_auto_ready({"ip": machine["ip"], **body})
-            fields = validate_machine(body, base=machine)
-            return 200, machine_json(self.store.update(machine["id"], fields))
+            changed = self.store.update(machine["id"], validate_machine(body, base=machine))
+            if changed is None:
+                return 404, {"error": "unknown machine"}
+            return 200, machine_json(changed)
 
         self._change_machines(change)
 
     def do_DELETE(self):
+        if self._cross_site():
+            return self._reply(403, {"error": "cross-site request refused"})
         machine, action = self._machine_route(urllib.parse.urlparse(self.path).path)
         if not self.path.startswith("/machines/") or action:
             return self._reply(404, {"error": "not found"})
@@ -1385,8 +1439,9 @@ def serve(config) -> None:
             server = ThreadingHTTPServer((host, config["port"]), Handler)
         except OSError as exc:
             # Usually the tailnet address is not on the interface yet at boot.
+            # `host` is kept: forgetting it here would let a moment without
+            # tailscaled drop us onto every interface.
             print(f"cannot listen on {host}:{config['port']} ({exc}), retrying", flush=True)
-            host = None
             time.sleep(BIND_RETRY_S)
             continue
         Handler.bound = host
