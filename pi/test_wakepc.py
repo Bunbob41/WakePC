@@ -39,7 +39,7 @@ bind_host = 100.64.0.2
 port = 8787
 
 [command:wake-pc]
-run = WOL AA:BB:CC:DD:EE:FF
+run = WOL 3C:7C:3F:12:34:56
 ping = 192.168.1.50
 broadcast_ip = 192.168.1.255
 
@@ -59,7 +59,7 @@ class ConfigTest(unittest.TestCase):
 
         wake = config["commands"]["wake-pc"]
         # MAC is normalised to bare lowercase hex for the magic packet.
-        self.assertEqual(wake.run, ("wol", "aabbccddeeff"))
+        self.assertEqual(wake.run, ("wol", "3c7c3f123456"))
         self.assertEqual(wake.ping, "192.168.1.50")
         self.assertEqual(wake.broadcast_ip, "192.168.1.255")
 
@@ -80,10 +80,9 @@ class ConfigTest(unittest.TestCase):
     def test_rejects_bad_configs(self):
         for label, text in [
             ("short token", VALID.replace("token = test-token", "token = 65")),
-            ("bad mac", VALID.replace("WOL AA:BB:CC:DD:EE:FF", "WOL nonsense")),
-            ("unknown runner", VALID.replace("run = WOL AA:BB:CC:DD:EE:FF", "run = rm -rf /")),
+            ("bad mac", VALID.replace("WOL 3C:7C:3F:12:34:56", "WOL nonsense")),
+            ("unknown runner", VALID.replace("run = WOL 3C:7C:3F:12:34:56", "run = rm -rf /")),
             ("bad command name", VALID.replace("[command:wake-pc]", "[command:Wake PC!]")),
-            ("no commands", VALID.split("[command:")[0]),
             ("ready not a number", VALID.replace("ping = 192.168.1.50", "ping = 192.168.1.50\nready = smb")),
             ("ready out of range", VALID.replace("ping = 192.168.1.50", "ping = 192.168.1.50\nready = 70000")),
             ("ready without ping", VALID.replace("run = shell sudo /usr/sbin/reboot", "run = shell sudo /usr/sbin/reboot\nready = 445")),
@@ -341,6 +340,398 @@ class ReadyTest(unittest.TestCase):
             page = response.read().decode()
         self.assertIn("'READY'", page)
         self.assertIn("'UP'", page)
+
+
+
+class FreshRelayTest(unittest.TestCase):
+    """A relay with nothing configured is the normal starting point now: the
+    phone adds the first machine, so setup needs no config editing at all."""
+
+    def test_a_config_with_no_commands_loads(self):
+        write_config(VALID.split("[command:")[0])
+        config = wakepc.load_config()
+        self.assertEqual(config["commands"], {})
+        self.assertTrue(config["phone_setup"])
+
+    def test_the_example_mac_is_ignored_rather_than_offered(self):
+        # An unedited example used to give the app a wake button that woke nothing.
+        write_config(VALID.replace("3C:7C:3F:12:34:56", "AA:BB:CC:DD:EE:FF"))
+        self.assertEqual(sorted(wakepc.load_config()["commands"]), ["reboot-pi"])
+
+    def test_the_shipped_example_config_loads(self):
+        wakepc.CONFIG_PATH = str(pathlib.Path(__file__).with_name("wakepc.conf.example"))
+        self.assertEqual(wakepc.load_config()["commands"], {})
+
+
+LAN = [wakepc.ipaddress.ip_interface("192.168.1.10/24")]
+
+
+class MachineFieldsTest(unittest.TestCase):
+
+    def setUp(self):
+        patcher = mock.patch.object(wakepc, "local_networks", return_value=LAN)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_mac_is_accepted_however_it_is_written(self):
+        for written in ("3C:7C:3F:12:34:56", "3c-7c-3f-12-34-56", "3c7c.3f12.3456", " 3C7C3F123456 "):
+            self.assertEqual(wakepc.clean_mac(written.strip()), "3c7c3f123456")
+
+    def test_macs_that_cannot_be_a_machine_are_refused(self):
+        for bad in ("nonsense", "AA:BB:CC:DD:EE:FF", "FF:FF:FF:FF:FF:FF", "01:00:5E:00:00:01",
+                    "00:00:00:00:00:00", "3C:7C:3F:12:34", None, 12):
+            with self.subTest(bad), self.assertRaises(wakepc.BadRequest):
+                wakepc.clean_mac(bad)
+
+    def test_only_home_network_addresses_can_be_probed(self):
+        # The relay pings and port-checks a machine's address on request, so an
+        # address off the LAN would turn a machine entry into a remote scanner.
+        self.assertEqual(wakepc.clean_lan_ip("192.168.1.50", "ip"), "192.168.1.50")
+        for bad in ("8.8.8.8", "127.0.0.1", "100.64.0.2", "169.254.1.1", "0.0.0.0", "::1", "pc.local"):
+            with self.subTest(bad), self.assertRaises(wakepc.BadRequest):
+                wakepc.clean_lan_ip(bad, "ip")
+
+    def test_the_broadcast_address_is_worked_out(self):
+        fields = wakepc.validate_machine({"name": "Desk PC", "mac": "3C:7C:3F:12:34:56", "ip": "192.168.1.50"})
+        self.assertEqual(fields["broadcast_ip"], "192.168.1.255")
+        self.assertIsNone(fields["ready"])
+
+    def test_bad_fields_say_what_is_wrong(self):
+        good = {"name": "Desk PC", "mac": "3C:7C:3F:12:34:56", "ip": "192.168.1.50"}
+        for label, change in [
+            ("no name", {"name": "  "}),
+            ("long name", {"name": "x" * 41}),
+            ("ready not a port", {"ready": "smb"}),
+            ("ready out of range", {"ready": 70000}),
+            ("ready without ip", {"ip": None, "ready": 445}),
+            ("bad broadcast", {"broadcast_ip": "everyone"}),
+        ]:
+            with self.subTest(label), self.assertRaises(wakepc.BadRequest):
+                wakepc.validate_machine({**good, **change})
+        with self.assertRaises(wakepc.BadRequest):
+            wakepc.validate_machine({"name": "no mac"})
+
+    def test_a_name_becomes_a_usable_id(self):
+        self.assertEqual(wakepc.slug("Desk PC!"), "desk-pc")
+        self.assertEqual(wakepc.slug("___"), "pc")
+
+
+class MachineStoreTest(unittest.TestCase):
+
+    def setUp(self):
+        patcher = mock.patch.object(wakepc, "local_networks", return_value=LAN)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.path = os.path.join(tempfile.mkdtemp(), "state", "machines.json")
+
+    def fields(self, name="Desk PC", mac="3C:7C:3F:12:34:56"):
+        return wakepc.validate_machine({"name": name, "mac": mac, "ip": "192.168.1.50", "ready": 445})
+
+    def test_machines_survive_a_restart(self):
+        added = wakepc.MachineStore(self.path).add(self.fields())
+        self.assertEqual(added["id"], "desk-pc")
+        again = wakepc.MachineStore(self.path)
+        self.assertEqual(again.all(), [added])
+        self.assertEqual(again.get("desk-pc")["ready"], 445)
+
+    def test_ids_never_collide_with_each_other_or_the_config(self):
+        store = wakepc.MachineStore(self.path, reserved={"wake-pc"})
+        first = store.add(self.fields("PC"))
+        second = store.add(self.fields("pc", mac="3C:7C:3F:12:34:57"))
+        # wake-pc is a command in the config, so no machine may be called "pc".
+        self.assertEqual([first["id"], second["id"]], ["pc-2", "pc-3"])
+
+    def test_the_same_machine_is_not_added_twice(self):
+        store = wakepc.MachineStore(self.path)
+        store.add(self.fields())
+        with self.assertRaises(wakepc.BadRequest):
+            store.add(self.fields("again"))
+
+    def test_update_and_remove(self):
+        store = wakepc.MachineStore(self.path)
+        machine = store.add(self.fields())
+        changed = store.update("desk-pc", wakepc.validate_machine({"name": "Tower"}, base=machine))
+        self.assertEqual((changed["id"], changed["name"], changed["mac"]), ("desk-pc", "Tower", "3c7c3f123456"))
+        self.assertTrue(store.remove("desk-pc"))
+        self.assertFalse(store.remove("desk-pc"))
+        self.assertEqual(wakepc.MachineStore(self.path).all(), [])
+
+    def test_a_failed_save_is_not_remembered(self):
+        store = wakepc.MachineStore(self.path)
+        with mock.patch.object(wakepc.os, "replace", side_effect=OSError("read-only")):
+            with self.assertRaises(wakepc.StorageError):
+                store.add(self.fields())
+        self.assertEqual(store.all(), [])
+
+    def test_a_damaged_file_does_not_stop_the_relay(self):
+        os.makedirs(os.path.dirname(self.path))
+        with open(self.path, "w") as handle:
+            handle.write("{not json")
+        with mock.patch("builtins.print"):
+            self.assertEqual(wakepc.MachineStore(self.path).all(), [])
+
+    def test_a_machine_is_also_a_command_older_apps_can_press(self):
+        write_config(VALID)
+        config = wakepc.load_config()
+        store = wakepc.MachineStore(None, reserved=config["commands"])
+        store.add(self.fields())
+        commands = wakepc.all_commands(config, store)
+        self.assertEqual(sorted(commands), ["reboot-pi", "wake-desk-pc", "wake-pc"])
+        cmd = commands["wake-desk-pc"]
+        self.assertEqual((cmd.run, cmd.ping, cmd.ready, cmd.confirm),
+                         (("wol", "3c7c3f123456"), "192.168.1.50", 445, False))
+
+
+class ScanTest(unittest.TestCase):
+
+    def test_linux_neighbours(self):
+        text = (
+            "192.168.1.1 dev eth0 lladdr 3c:7c:3f:00:00:01 REACHABLE\n"
+            "192.168.1.50 dev eth0 lladdr 3C:7C:3F:12:34:56 STALE\n"
+            "192.168.1.77 dev eth0  FAILED\n"
+            "192.168.1.78 dev eth0  INCOMPLETE\n"
+        )
+        self.assertEqual(wakepc.parse_neighbours(text),
+                         [("192.168.1.1", "3c7c3f000001"), ("192.168.1.50", "3c7c3f123456")])
+
+    def test_windows_neighbours(self):
+        text = (
+            "\nInterface: 192.168.1.10 --- 0xb\n"
+            "  Internet Address      Physical Address      Type\n"
+            "  192.168.1.1           3c-7c-3f-00-00-01     dynamic\n"
+            "  192.168.1.255         ff-ff-ff-ff-ff-ff     static\n"
+            "  224.0.0.22            01-00-5e-00-00-16     static\n"
+        )
+        self.assertEqual(wakepc.parse_neighbours(text), [("192.168.1.1", "3c7c3f000001")])
+
+    def test_macos_neighbours(self):
+        text = (
+            "? (192.168.1.1) at 3c:7c:3f:0:0:1 on en0 ifscope [ethernet]\n"
+            "? (192.168.1.9) at (incomplete) on en0 ifscope [ethernet]\n"
+        )
+        self.assertEqual(wakepc.parse_neighbours(text), [("192.168.1.1", "3c7c3f000001")])
+
+    def test_only_real_lan_interfaces_are_scanned(self):
+        text = json.dumps([
+            {"ifname": "lo", "addr_info": [{"local": "127.0.0.1", "prefixlen": 8}]},
+            {"ifname": "eth0", "addr_info": [{"local": "192.168.1.10", "prefixlen": 24}]},
+            {"ifname": "tailscale0", "addr_info": [{"local": "100.64.0.2", "prefixlen": 32}]},
+            {"ifname": "docker0", "addr_info": [{"local": "172.17.0.1", "prefixlen": 16}]},
+        ])
+        self.assertEqual([str(i) for i in wakepc.parse_ip_addr(text)], ["192.168.1.10/24"])
+        self.assertEqual(wakepc.parse_ip_addr("not json"), [])
+
+    def test_a_sweep_covers_the_subnet_but_not_a_huge_one(self):
+        small = wakepc.sweep_targets(wakepc.ipaddress.ip_interface("192.168.1.10/24"))
+        self.assertEqual(len(small), 253)
+        self.assertNotIn("192.168.1.10", small)
+        huge = wakepc.sweep_targets(wakepc.ipaddress.ip_interface("10.4.5.6/8"))
+        self.assertEqual((len(huge), huge[0]), (253, "10.4.5.1"))
+
+    def test_a_scan_lists_the_lan_and_marks_known_machines(self):
+        store = wakepc.MachineStore(None)
+        with mock.patch.object(wakepc, "local_networks", return_value=LAN):
+            store.add(wakepc.validate_machine({"name": "Desk PC", "mac": "3C:7C:3F:12:34:56"}))
+            neighbours = [
+                ("192.168.1.50", "3c7c3f123456"),
+                ("192.168.1.2", "3c7c3f000002"),
+                ("192.168.1.10", "3c7c3f00000a"),   # the relay itself
+                ("172.17.0.5", "3c7c3f000099"),     # not on the home network
+            ]
+            wakepc._scan_cache = (0.0, None)
+            with mock.patch.object(wakepc, "nudge_arp") as nudge, \
+                    mock.patch.object(wakepc, "read_neighbours", return_value=neighbours), \
+                    mock.patch.object(wakepc, "resolve_names", return_value={"192.168.1.50": "desk"}):
+                result = wakepc.scan_lan(store, settle=0)
+                wakepc.scan_lan(store, settle=0)  # served from cache: no second sweep
+        self.assertEqual(nudge.call_count, 1)
+        self.assertEqual(result["networks"], ["192.168.1.0/24"])
+        self.assertEqual(result["devices"], [
+            {"ip": "192.168.1.2", "mac": "3c:7c:3f:00:00:02", "name": None, "machine": None},
+            {"ip": "192.168.1.50", "mac": "3c:7c:3f:12:34:56", "name": "desk", "machine": "desk-pc"},
+        ])
+
+
+class RecoveryTest(unittest.TestCase):
+    """The relay once read its tailnet address only at startup. When the
+    address was not there yet, or changed later, it listened where nothing
+    arrived until the whole host was rebooted."""
+
+    AUTO = {"bind_host": "auto"}
+
+    def test_it_follows_the_tailnet_address(self):
+        with mock.patch.object(wakepc, "own_tailnet_addr", return_value="100.64.0.9"):
+            self.assertEqual(wakepc.wanted_bind(self.AUTO, "100.64.0.2"), "100.64.0.9")
+            self.assertEqual(wakepc.wanted_bind(self.AUTO, "0.0.0.0"), "100.64.0.9")
+
+    def test_it_holds_on_while_tailscale_is_briefly_away(self):
+        with mock.patch.object(wakepc, "own_tailnet_addr", return_value=None):
+            self.assertEqual(wakepc.wanted_bind(self.AUTO, "100.64.0.2"), "100.64.0.2")
+            self.assertEqual(wakepc.wanted_bind(self.AUTO), "0.0.0.0")
+
+    def test_an_explicit_address_is_left_alone(self):
+        with mock.patch.object(wakepc, "own_tailnet_addr", return_value="100.64.0.9"):
+            self.assertEqual(wakepc.wanted_bind({"bind_host": "10.0.0.5"}, "10.0.0.5"), "10.0.0.5")
+
+    def test_a_changed_address_stops_the_server_so_it_rebinds(self):
+        server = mock.Mock()
+        with mock.patch.object(wakepc, "REBIND_CHECK_S", 0), mock.patch("builtins.print"), \
+                mock.patch.object(wakepc, "own_tailnet_addr", side_effect=["100.64.0.2", None, "100.64.0.9"]):
+            wakepc.watch_bind(self.AUTO, server, "100.64.0.2")
+        server.shutdown.assert_called_once()
+
+    def test_key_expiry_is_read_from_tailscale(self):
+        now = wakepc.datetime.datetime(2026, 11, 17, 12, 0, 0)
+        soon = json.dumps({"Self": {"KeyExpiry": "2026-11-20T12:00:00.123456789Z"}})
+        self.assertEqual(wakepc.parse_key_expiry(soon, now), 3)
+        self.assertIsNone(wakepc.parse_key_expiry(json.dumps({"Self": {}}), now))  # expiry off
+        self.assertIsNone(wakepc.parse_key_expiry(b"garbage", now))
+
+
+class MachinesApiTest(unittest.TestCase):
+    """The whole first-wake path as an app drives it, against a real relay on
+    loopback with only the network itself (packets, pings) faked."""
+
+    @classmethod
+    def setUpClass(cls):
+        write_config(LOOPBACK)
+        wakepc.Handler.config = wakepc.load_config()
+        wakepc.Handler.log_message = lambda *args: None
+        cls.server = wakepc.ThreadingHTTPServer(("127.0.0.1", 0), wakepc.Handler)
+        cls.base = f"http://127.0.0.1:{cls.server.server_address[1]}"
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        wakepc.Handler.store = wakepc.MachineStore(None)
+
+    def setUp(self):
+        wakepc.Handler.store = wakepc.MachineStore(None, reserved=wakepc.Handler.config["commands"])
+        wakepc.Handler.config["phone_setup"] = True
+        for name, value in [("local_networks", LAN), ("key_expiry_days", None), ("WAIT_STEP_S", 0)]:
+            patcher = mock.patch.object(wakepc, name, **(
+                {"return_value": value} if callable(getattr(wakepc, name)) else {"new": value}))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def call(self, method, path, body=None, token="test-token"):
+        request = urllib.request.Request(
+            self.base + path, method=method,
+            data=None if body is None else json.dumps(body).encode(),
+            headers={"Authorization": f"Bearer {token}"} if token else {},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            with error:
+                return error.code, json.loads(error.read())
+
+    def add(self, **extra):
+        return self.call("POST", "/machines",
+                         {"name": "Desk PC", "mac": "3C:7C:3F:12:34:56", "ip": "192.168.1.50", **extra})
+
+    def test_health_says_what_an_app_needs_to_know(self):
+        code, body = self.call("GET", "/health")
+        self.assertEqual(code, 200)
+        self.assertEqual((body["ok"], body["api"], body["machines"], body["phone_setup"]),
+                         (True, wakepc.API_VERSION, 0, True))
+        self.assertIsInstance(body["warnings"], list)
+
+    def test_health_warns_before_the_tailscale_key_lapses(self):
+        with mock.patch.object(wakepc, "key_expiry_days", return_value=5):
+            body = self.call("GET", "/health")[1]
+        self.assertTrue(any("expires in 5 days" in w for w in body["warnings"]))
+
+    def test_everything_needs_the_caller_to_be_recognised(self):
+        for method, path in [("GET", "/health"), ("GET", "/scan"), ("GET", "/machines"),
+                             ("POST", "/machines"), ("PUT", "/machines/x"), ("DELETE", "/machines/x"),
+                             ("POST", "/machines/x/wake"), ("GET", "/machines/x/status")]:
+            with self.subTest(path=path, method=method):
+                self.assertEqual(self.call(method, path, token=None)[0], 401)
+
+    def test_add_list_change_and_forget_a_machine(self):
+        code, machine = self.add(ready=445)
+        self.assertEqual(code, 201)
+        self.assertEqual(machine, {
+            "id": "desk-pc", "name": "Desk PC", "mac": "3c:7c:3f:12:34:56",
+            "ip": "192.168.1.50", "ready": 445, "broadcast_ip": "192.168.1.255",
+        })
+        self.assertEqual(self.call("GET", "/machines")[1], {"machines": [machine]})
+
+        code, changed = self.call("PUT", "/machines/desk-pc", {"name": "Tower", "ready": None})
+        self.assertEqual((code, changed["name"], changed["ready"], changed["mac"]),
+                         (200, "Tower", None, "3c:7c:3f:12:34:56"))
+
+        self.assertEqual(self.call("DELETE", "/machines/desk-pc")[0], 200)
+        self.assertEqual(self.call("DELETE", "/machines/desk-pc")[0], 404)
+        self.assertEqual(self.call("GET", "/machines")[1], {"machines": []})
+
+    def test_a_bad_machine_is_refused_with_the_reason(self):
+        code, body = self.add(mac="AA:BB:CC:DD:EE:FF")
+        self.assertEqual(code, 400)
+        self.assertIn("example MAC", body["error"])
+        self.assertEqual(self.add(ip="8.8.8.8")[0], 400)
+        self.assertEqual(self.call("PUT", "/machines/nope", {"name": "x"})[0], 404)
+
+    def test_phone_setup_can_be_switched_off(self):
+        self.add()
+        wakepc.Handler.config["phone_setup"] = False
+        self.assertEqual(self.add(mac="3C:7C:3F:12:34:57")[0], 403)
+        self.assertEqual(self.call("DELETE", "/machines/desk-pc")[0], 403)
+        # What is already there can still be listed and woken.
+        self.assertEqual(len(self.call("GET", "/machines")[1]["machines"]), 1)
+
+    def test_a_machine_shows_up_as_a_command_for_older_apps(self):
+        self.add()
+        names = {c["name"]: c for c in self.call("GET", "/commands")[1]["commands"]}
+        self.assertEqual(names["wake-desk-pc"], {"name": "wake-desk-pc", "ping": True, "elevated": False})
+        with mock.patch.object(wakepc, "send_magic_packet") as send:
+            self.assertEqual(self.call("POST", "/run/wake-desk-pc")[0], 200)
+        send.assert_called_once_with("3c7c3f123456", "192.168.1.255")
+
+    def test_wake_sends_the_packet_and_returns_at_once(self):
+        self.add()
+        with mock.patch.object(wakepc, "send_magic_packet") as send, \
+                mock.patch.object(wakepc, "probe_ping") as ping:
+            code, body = self.call("POST", "/machines/desk-pc/wake")
+        self.assertEqual((code, body), (200, {"sent": True}))
+        send.assert_called_once_with("3c7c3f123456", "192.168.1.255")
+        ping.assert_not_called()
+        self.assertEqual(self.call("POST", "/machines/nope/wake")[0], 404)
+
+    def test_wake_and_wait_holds_on_until_the_machine_is_ready(self):
+        self.add(ready=445)
+        pings = [{"awake": False, "sent": 1}, {"awake": True, "sent": 1}, {"awake": True, "sent": 1}]
+        ports = [False, True]
+        with mock.patch.object(wakepc, "send_magic_packet"), \
+                mock.patch.object(wakepc, "probe_ping", side_effect=pings), \
+                mock.patch.object(wakepc, "probe_port", side_effect=ports):
+            code, body = self.call("POST", "/machines/desk-pc/wake?wait=60")
+        # asleep, then up (pings, port shut), then ready.
+        self.assertEqual((code, body["sent"], body["state"], body["ready"]), (200, True, "ready", True))
+        self.assertIs(body["sent"], True)  # not the ping's packet count
+
+    def test_wake_and_wait_gives_up_and_says_how_far_it_got(self):
+        self.add()
+        with mock.patch.object(wakepc, "send_magic_packet"), \
+                mock.patch.object(wakepc, "probe_ping", return_value={"awake": False}), \
+                mock.patch.object(wakepc.time, "monotonic", side_effect=[0, 1, 1, 99, 99, 99]):
+            code, body = self.call("POST", "/machines/desk-pc/wake?wait=30")
+        self.assertEqual((code, body["state"], body["awake"]), (200, "asleep", False))
+
+    def test_status_names_the_state(self):
+        self.add(ready=445)
+        with mock.patch.object(wakepc, "probe_ping", return_value={"awake": True, "avg_ms": 0.4}), \
+                mock.patch.object(wakepc, "probe_port", return_value=False):
+            code, body = self.call("GET", "/machines/desk-pc/status")
+        self.assertEqual((code, body["state"], body["awake"], body["ready"]), (200, "up", True, False))
+
+    def test_scan_is_served(self):
+        with mock.patch.object(wakepc, "scan_lan", return_value={"networks": [], "devices": []}):
+            self.assertEqual(self.call("GET", "/scan"), (200, {"networks": [], "devices": []}))
 
 
 if __name__ == "__main__":

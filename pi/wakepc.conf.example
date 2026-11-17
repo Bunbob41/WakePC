@@ -23,6 +23,15 @@ trust_tailnet = yes
 bind_host = auto
 port = 8787
 
+# The app can register machines to wake: it scans this host's network, you
+# pick your PC, and the relay remembers it. That is all a phone can ever add:
+# a wake packet only turns a machine on. Set to no to make this file the only
+# place anything is defined.
+phone_setup = yes
+
+# You do not need anything below for a first wake: add your PC from the app.
+# Commands are for what the app cannot set up itself, such as shell commands.
+#
 # Each [command:<name>] becomes a button the app can invoke by name only;
 # the phone can never send shell. Two run kinds:
 #   run = WOL <mac>        broadcast a wake-on-lan magic packet
@@ -40,14 +49,14 @@ port = 8787
 #                          machine; set it by hand for commands whose name
 #                          does not give them away.
 
-[command:wake-pc]
-run = WOL AA:BB:CC:DD:EE:FF
-ping = 192.168.1.50
-ready = 445
-broadcast_ip = 192.168.1.255
+# [command:wake-pc]
+# run = WOL AA:BB:CC:DD:EE:FF
+# ping = 192.168.1.50
+# ready = 445
+# broadcast_ip = 192.168.1.255
 
 # Shell commands run as the unprivileged wakepc user. For privileged ones,
 # add a sudoers rule, e.g. in /etc/sudoers.d/wakepc:
 #   wakepc ALL=(root) NOPASSWD: /usr/sbin/reboot
-[command:reboot-pi]
-run = shell sudo /usr/sbin/reboot
+# [command:reboot-pi]
+# run = shell sudo /usr/sbin/reboot

@@ -49,6 +49,55 @@ can never supply a shell string.
 
 Newest first. Each entry: the decision, why, and what it replaced.
 
+### Machines the phone can register, and a relay that heals itself (unreleased)
+
+**The problem.** Setup to first wake was: find the PC's MAC by hand, edit
+`/etc/wakepc.conf` over SSH, restart, then fill in two forms in the app. No
+step checked the one before, so every mistake surfaced at the end as the same
+timeout. The example config even shipped a fake MAC, so an unedited relay
+offered a wake button that woke nothing.
+
+**Machines.** The relay now holds *machines* as well as config commands. It
+can scan its own LAN (`GET /scan`) and the app registers the one the user
+picks (`POST /machines`). They live in `/var/lib/wakepc/machines.json`
+(systemd `StateDirectory`), because the service account cannot write its own
+config under `/etc`, and should not.
+
+**Why this does not break "the client can never supply shell".** A machine is
+a MAC plus an optional LAN address. The only thing it can do is receive a
+magic packet, which turns a machine on and nothing else. Shell commands still
+come from the config file alone. Two limits keep the new surface small: a
+machine's address must be a private LAN address, since the relay pings and
+port-checks it on request and would otherwise be a way to probe arbitrary
+hosts; and `phone_setup = no` switches registration off entirely.
+
+**Scan without privileges.** The relay sends an empty UDP datagram to the
+discard port of each address on its subnet, which makes the kernel resolve
+them, then reads the neighbour table (`ip neigh`, or `arp -a` elsewhere). No
+raw sockets, no root, no dependencies. It only finds machines that are
+switched on, so setup asks for the PC to be running. Subnets larger than 1024
+addresses are swept as the /24 around the relay. On hosts without `ip`
+(Windows, macOS) the subnet is assumed to be a /24.
+
+**Compatibility.** Each machine is also exposed as the command `wake-<id>`
+through the old `/commands`, `/run` and `/status` routes, so the existing app
+and the panel work with it before the app learns about machines.
+
+**Self-recovery.** The relay read its tailnet address once at startup. If
+tailscaled came up late, restarted or re-registered, it kept listening on an
+address nothing arrives at, and looked dead until the host was rebooted. This
+was seen in the field. It now rechecks every 30 seconds and rebinds when the
+address changes. While tailscaled is briefly away it keeps the address it has
+rather than flapping. The unit is `Restart=always`.
+
+**Health in words.** `/health` returns `warnings` as sentences the app can
+show as they are, including a Tailscale node key within 14 days of expiry:
+that failure is silent and arrives months after setup.
+
+**Wake and wait.** `POST /machines/<id>/wake?wait=N` replies when the machine
+is usable or the time is up. The app polls and does not need it; a script or
+an assistant wants one request that ends in an answer.
+
 ### READY: waiting for a usable machine, not just a ping (0.15.0)
 
 A command can name a TCP port (`ready = 445`). `/status` then adds

@@ -6,6 +6,27 @@ Only the latest has a published APK on the
 The reasoning behind each change lives in
 [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
+## Unreleased
+
+The relay half of a simpler setup. The app's new setup screen follows.
+
+- No config editing for a first wake. The relay can scan its own network and
+  remember machines the app registers, so setup no longer means finding a MAC
+  address and typing it into a file on the Pi. A fresh relay starts empty.
+- A phone can only ever add a machine to wake. Shell commands still come from
+  the relay's config file alone. `phone_setup = no` turns even that off.
+- The relay recovers on its own. It used to read its Tailscale address once
+  at startup, and if that changed it went on listening where nothing arrived
+  until the host was rebooted. It now follows the address.
+- `/health` reports problems in plain words, including a Tailscale key that is
+  about to expire.
+- Wake and wait: `POST /machines/<id>/wake?wait=90` replies once the machine
+  is usable, for callers that are not the app.
+- An unedited example config no longer offers a wake button that wakes
+  nothing: the example MAC is ignored, and the example ships with no commands.
+- Each machine also appears as the command `wake-<id>`, so the current app and
+  the Pi panel can use it already.
+
 ## 0.15.0 (2026-11-08)
 
 - READY. A PC answers ping long before you can use it. Add `ready = 445` (or

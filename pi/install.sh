@@ -42,7 +42,9 @@ if [ ! -f /etc/sudoers.d/wakepc ]; then
 fi
 
 systemctl daemon-reload
-systemctl enable --now wakepc >/dev/null
+systemctl enable wakepc >/dev/null
+# restart, not just start: a re-run is how the relay is updated.
+systemctl restart wakepc
 sleep 1
 
 if ! systemctl is-active --quiet wakepc; then
@@ -54,7 +56,6 @@ echo
 python3 /opt/wakepc/wakepc.py status
 if [ -n "$FRESH" ]; then
   echo
-  echo "Next: edit /etc/wakepc.conf to set your PC's MAC and ping IP,"
-  echo "then 'sudo systemctl restart wakepc'."
-  echo "In the app: add connection, paste the address above. No token."
+  echo "Next, in the app: add a connection with the address above (no token),"
+  echo "then pick your PC from the list. Have the PC switched on so it shows up."
 fi

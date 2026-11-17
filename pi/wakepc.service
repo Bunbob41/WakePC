@@ -6,7 +6,8 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/usr/bin/python3 /opt/wakepc/wakepc.py
-Restart=on-failure
+# Always: a relay that stays down needs a trip to the machine to notice.
+Restart=always
 RestartSec=5
 # Dedicated unprivileged user; it owns /etc/wakepc.conf (mode 600).
 # Create with: useradd -r -s /usr/sbin/nologin wakepc
@@ -16,6 +17,9 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# /var/lib/wakepc, owned by the service user: where machines added from the
+# app are kept. The one place it may write under ProtectSystem=strict.
+StateDirectory=wakepc
 
 [Install]
 WantedBy=multi-user.target
